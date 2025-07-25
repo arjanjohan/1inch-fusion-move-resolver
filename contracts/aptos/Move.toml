@@ -1,0 +1,69 @@
+[package]
+name = "fusion_plus"
+version = "1.0.0"
+upgrade_policy = "compatible"
+
+[addresses]
+fusion_plus = "_"
+
+[dev-addresses]
+fusion_plus = "0x234"
+
+[dependencies]
+AptosFramework = { local = "/home/arjan/git/movement/aptos-core/aptos-move/framework/aptos-framework" }
+# AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev = "main" }
+
+[dev-dependencies]
+
+AptosFramework = { local = "/home/arjan/git/movement/aptos-core/aptos-move/framework/aptos-framework" }
+# AptosFramework = { git = "https://github.com/aptos-labs/aptos-core.git", subdir = "aptos-move/framework/aptos-framework", rev = "main" }
+
+[profile.default]
+# Enable all linters
+all_features = true
+# Enable all warnings
+warnings = true
+# Enable all checks
+check = true
+# Enable all tests
+test = true
+# Enable all documentation
+doc = true
+# Enable all formatting
+fmt = true
+# Enable all verification
+verify = true
+
+[profile.release]
+# Optimize for size
+optimize = true
+# Enable all linters
+all_features = true
+# Enable all warnings
+warnings = true
+# Enable all checks
+check = true
+# Enable all tests
+test = true
+# Enable all documentation
+doc = true
+# Enable all formatting
+fmt = true
+# Enable all verification
+verify = true
+
+[profile.test]
+# Enable all linters
+all_features = true
+# Enable all warnings
+warnings = true
+# Enable all checks
+check = true
+# Enable all tests
+test = true
+# Enable all documentation
+doc = true
+# Enable all formatting
+fmt = true
+# Enable all verification
+verify = true
