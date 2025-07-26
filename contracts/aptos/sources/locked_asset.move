@@ -57,7 +57,7 @@ module fusion_plus::locked_asset {
         metadata: Object<Metadata>,
         amount: u64,
         safety_deposit_amount: u64,
-        recipient: address,
+        recipient: Option<address>,
         resolver: Option<address>,
         chain_id: u64,
     }
@@ -111,7 +111,8 @@ module fusion_plus::locked_asset {
     /// @param metadata The metadata of the asset.
     /// @param escrow_id The ID of the escrow this asset belongs to.
     /// @param timelock_id The ID of the timelock governing this asset.
-    /// @param recipient The optional recipient address of the wrapped asset.
+    /// @param owner The creator address of the wrapped asset.
+    /// @param recipient The recipient address of the wrapped asset.
     /// @param resolver The optional resolver address of the wrapped asset.
     /// @param chain_id Chain ID where this asset originated.
     /// @param timelock The timelock controlling the asset phases.
@@ -121,11 +122,12 @@ module fusion_plus::locked_asset {
         amount: u64,
         safety_deposit_metadata: Object<Metadata>,
         safety_deposit_amount: u64,
-        recipient: address,
+        recipient: Option<address>,
         resolver: Option<address>,
         chain_id: u64,
         timelock: Option<Timelock>,
         hashlock: HashLock,
+
     }
 
     /// A view struct of the LockedAsset.
@@ -159,17 +161,13 @@ module fusion_plus::locked_asset {
         chain_id: u64
     ) : Object<LockedAsset> acquires GlobalConfig {
 
-        let recipient = signer::address_of(signer);
-        let resolver = option::none();
-        let timelock = option::none();
-
         new_internal(
             signer,
             asset,
-            recipient,
-            resolver,
+            option::none(), // recipient is not set yet
+            option::none(), // resolver is not set yet
             hash,
-            timelock,
+            option::none(), // timelock is not set yet
             chain_id
         )
     }
@@ -185,13 +183,13 @@ module fusion_plus::locked_asset {
 
         let resolver = signer::address_of(signer);
 
-        let config = borrow_global<GlobalConfig>(@fusion_plus);
+        let config = borrow_global_config();
         let timelock = timelock::new(config.finality_duration, config.exclusive_duration, config.private_cancellation_duration);
 
         new_internal(
             signer,
             asset,
-            recipient,
+            option::some(recipient),
             option::some(resolver),
             hash,
             option::some(timelock),
@@ -218,7 +216,7 @@ module fusion_plus::locked_asset {
     fun new_internal(
         signer: &signer,
         asset: FungibleAsset,
-        recipient: address,
+        recipient: Option<address>,
         resolver: Option<address>,
         hash: vector<u8>,
         timelock: Option<Timelock>,
@@ -316,26 +314,16 @@ module fusion_plus::locked_asset {
         );
     }
 
-    // public(friend) fun withdraw_funds_on_source_chain(
-    //     signer: &signer,
-    //     locked_asset: Object<LockedAsset>,
-    //     secret: vector<u8>
-    // ) acquires LockedAsset {
-    //     let locked_asset_ref = borrow_locked_asset_mut(&locked_asset);
-    //     let hashlock = locked_asset_ref.hashlock;
+    public(friend) fun withdraw_funds(
+        signer: &signer,
+        locked_asset: Object<LockedAsset>,
+        secret: vector<u8>
+    ) acquires LockedAsset {
+        let locked_asset_ref = borrow_locked_asset_mut(&locked_asset);
+        let hashlock = locked_asset_ref.hashlock;
 
-    // }
+    }
 
-
-    // public(friend) fun withdraw_funds_on_destination_chain(
-    //     signer: &signer,
-    //     locked_asset: Object<LockedAsset>,
-    //     secret: vector<u8>
-    // ) acquires LockedAsset {
-    //     let locked_asset_ref = borrow_locked_asset_mut(&locked_asset);
-    //     let hashlock = locked_asset_ref.hashlock;
-
-    // }
 
     // this function can only be called before the resolver picks up the order.
     public(friend) fun user_destroy_order(
@@ -347,7 +335,8 @@ module fusion_plus::locked_asset {
         let signer_address = signer::address_of(signer);
         let locked_asset_address = object::object_address(&locked_asset);
 
-        assert!(signer_address == locked_asset_ref.recipient, EINVALID_CALLER);
+        assert!(signer_address == object::owner<LockedAsset>(locked_asset), EINVALID_CALLER);
+        assert!(locked_asset_ref.recipient == option::none(), EINVALID_CALLER);
         assert!(option::is_none(&locked_asset_ref.timelock), EINVALID_PHASE);
         assert!(option::is_none(&locked_asset_ref.resolver), EINVALID_PHASE);
 
@@ -358,7 +347,7 @@ module fusion_plus::locked_asset {
         primary_fungible_store::transfer(
             &object_signer,
             locked_asset_ref.metadata,
-            locked_asset_ref.recipient,
+            signer_address,
             locked_asset_ref.amount
         );
 
@@ -377,7 +366,7 @@ module fusion_plus::locked_asset {
         primary_fungible_store::transfer(
             &object_signer,
             locked_asset_ref.safety_deposit_metadata,
-            locked_asset_ref.recipient,
+            signer_address,
             locked_asset_ref.safety_deposit_amount
         );
 
@@ -392,7 +381,7 @@ module fusion_plus::locked_asset {
     ///
     /// @param locked_asset The LockedAsset to get recipient from.
     /// @return Option<address> The recipient address.
-    public fun get_recipient(locked_asset_obj: Object<LockedAsset>): address acquires LockedAsset {
+    public fun get_recipient(locked_asset_obj: Object<LockedAsset>): Option<address> acquires LockedAsset {
         borrow_locked_asset(&locked_asset_obj).recipient
     }
 
@@ -508,12 +497,12 @@ module fusion_plus::locked_asset {
     // // - - - - INTERNAL FUNCTIONS - - - -
 
     fun safety_deposit_metadata(): Object<Metadata> acquires GlobalConfig {
-        let config = borrow_global<GlobalConfig>(@fusion_plus);
+        let config = borrow_global_config();
         config.safety_deposit_metadata
     }
 
     fun safety_deposit_amount(): u64 acquires GlobalConfig {
-        let config = borrow_global<GlobalConfig>(@fusion_plus);
+        let config = borrow_global_config();
         config.safety_deposit_amount
     }
 
@@ -531,11 +520,29 @@ module fusion_plus::locked_asset {
         timelock::is_exclusive_duration_valid(exclusive_duration);
         timelock::is_private_cancellation_duration_valid(private_cancellation_duration);
 
-        let config = borrow_global_mut<GlobalConfig>(@fusion_plus);
+        let config = borrow_global_config_mut();
 
         config.finality_duration = finality_duration;
         config.exclusive_duration = exclusive_duration;
         config.private_cancellation_duration = private_cancellation_duration;
+    }
+
+    public fun set_safety_deposit_metadata(
+        signer: &signer,
+        safety_deposit_metadata: Object<Metadata>
+    ) acquires GlobalConfig {
+        assert!(signer::address_of(signer) == @fusion_plus, ENOT_ADMIN);
+        let config = borrow_global_config_mut();
+        config.safety_deposit_metadata = safety_deposit_metadata;
+    }
+
+    public fun set_safety_deposit_amount(
+        signer: &signer,
+        safety_deposit_amount: u64
+    ) acquires GlobalConfig {
+        assert!(signer::address_of(signer) == @fusion_plus, ENOT_ADMIN);
+        let config = borrow_global_config_mut();
+        config.safety_deposit_amount = safety_deposit_amount;
     }
 
     public fun sweep_other_asset(
@@ -584,6 +591,14 @@ module fusion_plus::locked_asset {
 
     inline fun borrow_locked_asset_controller_mut(locked_asset_obj: &Object<LockedAsset>): &mut LockedAssetController acquires LockedAssetController {
         borrow_global_mut<LockedAssetController>(object::object_address(locked_asset_obj))
+    }
+
+    inline fun borrow_global_config(): &GlobalConfig acquires GlobalConfig {
+        borrow_global<GlobalConfig>(@fusion_plus)
+    }
+
+    inline fun borrow_global_config_mut(): &mut GlobalConfig acquires GlobalConfig {
+        borrow_global_mut<GlobalConfig>(@fusion_plus)
     }
 
     // - - - - TEST FUNCTIONS - - - -

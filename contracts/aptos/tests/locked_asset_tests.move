@@ -54,7 +54,7 @@ module fusion_plus::locked_asset_tests {
 
         // Verify initial state
         assert!(locked_asset::is_timelock_active(locked_asset) == false, 0);
-        assert!(locked_asset::get_recipient(locked_asset) == RECIPIENT, 0);
+        assert!(locked_asset::get_recipient(locked_asset) == option::none(), 0);
         assert!(locked_asset::get_resolver(locked_asset) == option::none(), 0);
         assert!(locked_asset::get_metadata(locked_asset) == metadata, 0);
         assert!(locked_asset::get_amount(locked_asset) == ASSET_AMOUNT, 0);
@@ -92,7 +92,7 @@ module fusion_plus::locked_asset_tests {
 
         // Verify initial state before destruction
         assert!(locked_asset::is_timelock_active(locked_asset) == false, 0);
-        assert!(locked_asset::get_recipient(locked_asset) == RECIPIENT, 0);
+        assert!(locked_asset::get_recipient(locked_asset) == option::none(), 0);
         assert!(locked_asset::get_resolver(locked_asset) == option::none(), 0);
 
         // Verify safety deposit was transferred to locked asset
