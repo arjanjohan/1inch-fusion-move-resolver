@@ -2,6 +2,7 @@ module fusion_plus::locked_asset {
 
     use std::option::{Self, Option};
     use std::signer;
+    use std::debug;
     use aptos_framework::event::{Self};
     use aptos_framework::fungible_asset::{Self, FungibleAsset, Metadata};
     use aptos_framework::object::{Self, Object, ExtendRef, DeleteRef, ObjectGroup};
@@ -42,6 +43,8 @@ module fusion_plus::locked_asset {
 
     // - - - - CONSTANTS - - - -
 
+    const DEFAULT_SAFETY_DEPOSIT_AMOUNT: u64 = 100_000;
+
     const DEFAULT_FINALITY_DURATION: u64 = 60 * 60 * 24 * 30; // 30 days
     const DEFAULT_EXCLUSIVE_DURATION: u64 = 60 * 60 * 24 * 30; // 30 days
     const DEFAULT_PRIVATE_CANCELLATION_DURATION: u64 = 60 * 60 * 24 * 30; // 30 days
@@ -53,6 +56,7 @@ module fusion_plus::locked_asset {
     struct LockedAssetCreatedEvent has drop, store {
         metadata: Object<Metadata>,
         amount: u64,
+        safety_deposit_amount: u64,
         recipient: address,
         resolver: Option<address>,
         chain_id: u64,
@@ -94,6 +98,8 @@ module fusion_plus::locked_asset {
     }
 
     struct GlobalConfig has key {
+        safety_deposit_metadata: Object<Metadata>,
+        safety_deposit_amount: u64,
         finality_duration: u64,
         exclusive_duration: u64,
         private_cancellation_duration: u64,
@@ -106,14 +112,15 @@ module fusion_plus::locked_asset {
     /// @param escrow_id The ID of the escrow this asset belongs to.
     /// @param timelock_id The ID of the timelock governing this asset.
     /// @param recipient The optional recipient address of the wrapped asset.
-    /// @param owner The original owner of the asset.
+    /// @param resolver The optional resolver address of the wrapped asset.
     /// @param chain_id Chain ID where this asset originated.
     /// @param timelock The timelock controlling the asset phases.
     /// @param hashlock The hashlock protecting the asset.
     struct LockedAsset has key, store {
         metadata: Object<Metadata>,
         amount: u64,
-        // TODO: add safety_deposit_amount
+        safety_deposit_metadata: Object<Metadata>,
+        safety_deposit_amount: u64,
         recipient: address,
         resolver: Option<address>,
         chain_id: u64,
@@ -125,7 +132,9 @@ module fusion_plus::locked_asset {
     struct LockedAssetView has drop {
         metadata: Object<Metadata>,
         amount: u64,
-        recipient: Option<address>,
+        safety_deposit_metadata: Object<Metadata>,
+        safety_deposit_amount: u64,
+        recipient: address,
         resolver: Option<address>,
         chain_id: u64,
         timelock: Option<Timelock>,
@@ -134,6 +143,8 @@ module fusion_plus::locked_asset {
 
     fun init_module(owner: &signer) {
         move_to(owner, GlobalConfig {
+            safety_deposit_metadata: object::address_to_object<Metadata>(@0xa),
+            safety_deposit_amount: DEFAULT_SAFETY_DEPOSIT_AMOUNT,
             finality_duration: DEFAULT_FINALITY_DURATION,
             exclusive_duration: DEFAULT_EXCLUSIVE_DURATION,
             private_cancellation_duration: DEFAULT_PRIVATE_CANCELLATION_DURATION,
@@ -142,18 +153,18 @@ module fusion_plus::locked_asset {
 
     // Creates a new LockedAsset from a user. The order has not been picked up by the resolver yet, so this value is not set. The  hashlock is not initialized yet, meaning the user can withdraw and destroy this object at any point.
     public(friend) fun new_from_user(
-        owner: &signer,
+        signer: &signer,
         asset: FungibleAsset,
         hash: vector<u8>,
         chain_id: u64
-    ) : Object<LockedAsset> {
+    ) : Object<LockedAsset> acquires GlobalConfig {
 
-        let recipient = signer::address_of(owner);
+        let recipient = signer::address_of(signer);
         let resolver = option::none();
         let timelock = option::none();
 
         new_internal(
-            owner,
+            signer,
             asset,
             recipient,
             resolver,
@@ -165,20 +176,20 @@ module fusion_plus::locked_asset {
 
     // Creates a new LockedAsset from a resolver.
     public(friend) fun new_from_resolver(
-        owner: &signer,
+        signer: &signer,
         recipient: address,
         asset: FungibleAsset,
         hash: vector<u8>,
         chain_id: u64
     ) : Object<LockedAsset> acquires GlobalConfig {
 
-        let resolver = signer::address_of(owner);
+        let resolver = signer::address_of(signer);
 
         let config = borrow_global<GlobalConfig>(@fusion_plus);
         let timelock = timelock::new(config.finality_duration, config.exclusive_duration, config.private_cancellation_duration);
 
         new_internal(
-            owner,
+            signer,
             asset,
             recipient,
             option::some(resolver),
@@ -205,14 +216,14 @@ module fusion_plus::locked_asset {
     /// @reverts EINVALID_DURATION if any duration is zero.
     /// @reverts EINVALID_CHAIN if chain_id is zero.
     fun new_internal(
-        owner: &signer,
+        signer: &signer,
         asset: FungibleAsset,
         recipient: address,
         resolver: Option<address>,
         hash: vector<u8>,
         timelock: Option<Timelock>,
         chain_id: u64
-    ): Object<LockedAsset> {
+    ): Object<LockedAsset> acquires GlobalConfig {
         // Validate inputs
         assert!(fungible_asset::amount(&asset) > 0, EINVALID_ASSET);
         assert!(chain_id > 0, EINVALID_CHAIN);
@@ -221,7 +232,7 @@ module fusion_plus::locked_asset {
         let amount = fungible_asset::amount(&asset);
 
         // Create the object and LockedAsset
-        let constructor_ref = object::create_object_from_account(owner);
+        let constructor_ref = object::create_object_from_account(signer);
         let object_signer = object::generate_signer(&constructor_ref);
         let extend_ref = object::generate_extend_ref(&constructor_ref);
         let delete_ref = object::generate_delete_ref(&constructor_ref);
@@ -234,10 +245,15 @@ module fusion_plus::locked_asset {
 
         let hashlock = hashlock::create_hashlock(hash);
 
+        let safety_deposit_metadata = safety_deposit_metadata();
+        let safety_deposit_amount = safety_deposit_amount();
+
         // Create the LockedAsset
         let locked_asset = LockedAsset {
             metadata,
             amount,
+            safety_deposit_metadata,
+            safety_deposit_amount,
             recipient,
             resolver,
             chain_id,
@@ -249,7 +265,7 @@ module fusion_plus::locked_asset {
 
         let object_address = signer::address_of(&object_signer);
 
-        // Store the asset in the primary store
+        // Store the asset in the locked_asset primary store
         primary_fungible_store::ensure_primary_store_exists(
             object_address,
             metadata,
@@ -259,10 +275,19 @@ module fusion_plus::locked_asset {
             asset
         );
 
+        // Transfer the safety deposit amount to locked_asset primary store
+        primary_fungible_store::transfer(
+            signer,
+            safety_deposit_metadata,
+            object_address,
+            safety_deposit_amount
+        );
+
         event::emit(
             LockedAssetCreatedEvent {
                 metadata,
                 amount,
+                safety_deposit_amount,
                 recipient,
                 resolver,
                 chain_id
@@ -337,6 +362,7 @@ module fusion_plus::locked_asset {
             locked_asset_ref.amount
         );
 
+
         // Sweep any remaining balance to the contract
         let remaining_balance = primary_fungible_store::balance(
             locked_asset_address,
@@ -347,6 +373,12 @@ module fusion_plus::locked_asset {
             locked_asset_ref.metadata,
             @fusion_plus,
             remaining_balance
+        );
+        primary_fungible_store::transfer(
+            &object_signer,
+            locked_asset_ref.safety_deposit_metadata,
+            locked_asset_ref.recipient,
+            locked_asset_ref.safety_deposit_amount
         );
 
         object::delete(delete_ref);
@@ -390,6 +422,25 @@ module fusion_plus::locked_asset {
     public fun get_amount(locked_asset_obj: Object<LockedAsset>): u64 acquires LockedAsset {
         borrow_locked_asset(&locked_asset_obj).amount
     }
+
+    #[view]
+    /// Gets the safety deposit metadata of the locked asset.
+    ///
+    /// @param locked_asset The LockedAsset to get safety deposit metadata from.
+    /// @return Object<Metadata> The metadata object.
+    public fun get_safety_deposit_metadata(locked_asset_obj: Object<LockedAsset>): Object<Metadata> acquires LockedAsset {
+        borrow_locked_asset(&locked_asset_obj).safety_deposit_metadata
+    }
+
+    #[view]
+    /// Gets the safety deposit amount of the locked asset.
+    ///
+    /// @param locked_asset The LockedAsset to get safety deposit amount from.
+    /// @return u64 The amount.
+    public fun get_safety_deposit_amount(locked_asset_obj: Object<LockedAsset>): u64 acquires LockedAsset {
+        borrow_locked_asset(&locked_asset_obj).safety_deposit_amount
+    }
+
 
     #[view]
     /// Gets the creation timestamp of the locked asset.
@@ -454,6 +505,17 @@ module fusion_plus::locked_asset {
         option::is_some(&locked_asset.timelock) && timelock::is_in_private_cancellation_phase(option::borrow(&locked_asset.timelock))
     }
 
+    // // - - - - INTERNAL FUNCTIONS - - - -
+
+    fun safety_deposit_metadata(): Object<Metadata> acquires GlobalConfig {
+        let config = borrow_global<GlobalConfig>(@fusion_plus);
+        config.safety_deposit_metadata
+    }
+
+    fun safety_deposit_amount(): u64 acquires GlobalConfig {
+        let config = borrow_global<GlobalConfig>(@fusion_plus);
+        config.safety_deposit_amount
+    }
 
     // - - - - ADMIN FUNCTIONS - - - -
 
@@ -526,5 +588,19 @@ module fusion_plus::locked_asset {
 
     // - - - - TEST FUNCTIONS - - - -
 
+    #[test_only]
+    public fun init_module_for_test(owner: &signer) {
+        init_module(owner);
+    }
+
+    #[test_only]
+    public fun safety_deposit_metadata_for_test(): Object<Metadata> acquires GlobalConfig {
+        safety_deposit_metadata()
+    }
+
+    #[test_only]
+    public fun safety_deposit_amount_for_test(): u64 acquires GlobalConfig {
+        safety_deposit_amount()
+    }
 
 }

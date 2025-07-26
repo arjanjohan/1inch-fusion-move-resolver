@@ -90,9 +90,9 @@ aptos move publish --named-addresses fusion_plus=YOUR_ACCOUNT_ADDRESS
 ## TODO
 
 - Implement Aptos as destination chain
-- Implement APtos as source chain
-   - How to handle token approval? When user creates an order, on Aptos user cannot give permissions/access to tokens without transferring it.
+- Implement Aptos as source chain
 - Partial fills
+- Full test coverage
 
 ## Team
 

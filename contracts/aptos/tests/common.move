@@ -4,9 +4,21 @@ module fusion_plus::common {
     use std::option::{Self};
     use std::string::utf8;
     use aptos_framework::account;
+    use aptos_framework::aptos_coin::{Self, AptosCoin};
     use aptos_framework::fungible_asset::{Self, Metadata, MintRef};
     use aptos_framework::object::{Self, Object};
     use aptos_framework::primary_fungible_store;
+
+
+    public fun initialize_account_with_fa(address: address) : signer{
+        let signer = account::create_account_for_test(address);
+        let fa = aptos_coin::mint_apt_fa_for_test(100_000_000_000_000_000);
+        primary_fungible_store::deposit(
+            address,
+            fa
+        );
+        signer
+    }
 
     public fun create_test_token(owner: &signer, seed: vector<u8>): (Object<Metadata>, MintRef) {
         let constructor_ref = object::create_named_object(owner, seed);

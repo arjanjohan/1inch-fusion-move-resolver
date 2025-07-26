@@ -2,15 +2,13 @@ module fusion_plus::locked_asset_tests {
     use std::option::{Self};
     use std::string::utf8;
     use std::hash;
-    use std::signer;
     use std::debug;
     use aptos_framework::account;
-    use aptos_framework::fungible_asset::{Self, FungibleAsset, Metadata, MintRef};
+    use aptos_framework::fungible_asset::{Self, Metadata, MintRef};
     use aptos_framework::object::{Self, Object};
     use aptos_framework::primary_fungible_store;
     use aptos_framework::timestamp;
     use fusion_plus::locked_asset::{Self, LockedAsset};
-    use fusion_plus::hashlock;
     use fusion_plus::common;
 
     // Test accounts
@@ -26,23 +24,25 @@ module fusion_plus::locked_asset_tests {
     const TEST_SECRET: vector<u8> = b"my secret";
     const WRONG_SECRET: vector<u8> = b"wrong secret";
 
-    fun setup_test(): (signer, Object<Metadata>, MintRef) {
+    fun setup_test(): (signer, signer, signer, Object<Metadata>, MintRef) {
         timestamp::set_time_has_started_for_testing(&account::create_signer_for_test(@aptos_framework));
+        let fusion_signer = account::create_account_for_test(@fusion_plus);
 
-        let owner = account::create_account_for_test(OWNER);
-        account::create_account_for_test(RECIPIENT);
-        account::create_account_for_test(RESOLVER);
+        let owner = common::initialize_account_with_fa(OWNER);
+        let recipient = common::initialize_account_with_fa(RECIPIENT);
+        let resolver = common::initialize_account_with_fa(RESOLVER);
 
         let (metadata, mint_ref) = common::create_test_token(&owner, b"Test Token");
 
-        (owner, metadata, mint_ref)
+        locked_asset::init_module_for_test(&fusion_signer);
+
+        (owner, recipient, resolver, metadata, mint_ref)
     }
 
     #[test]
     fun test_create_locked_asset_from_user() {
-        let (owner, metadata, mint_ref) = setup_test();
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
 
-        let recipient = account::create_account_for_test(RECIPIENT);
         let asset = fungible_asset::mint(&mint_ref, ASSET_AMOUNT);
 
         let locked_asset = locked_asset::new_from_user(
@@ -59,14 +59,27 @@ module fusion_plus::locked_asset_tests {
         assert!(locked_asset::get_metadata(locked_asset) == metadata, 0);
         assert!(locked_asset::get_amount(locked_asset) == ASSET_AMOUNT, 0);
         assert!(locked_asset::get_chain_id(locked_asset) == CHAIN_ID, 0);
+
+        // Verify safety deposit amount is correct
+        assert!(locked_asset::get_safety_deposit_amount(locked_asset) == locked_asset::safety_deposit_amount_for_test(), 0);
+        assert!(locked_asset::get_safety_deposit_metadata(locked_asset) == locked_asset::safety_deposit_metadata_for_test(), 0);
     }
 
     #[test]
     fun test_user_destroy_order_happy_flow() {
-        let (owner, metadata, mint_ref) = setup_test();
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
 
-        let recipient = account::create_account_for_test(RECIPIENT);
         let asset = fungible_asset::mint(&mint_ref, ASSET_AMOUNT);
+
+        // Record initial balances
+        let initial_main_balance = primary_fungible_store::balance(
+            RECIPIENT,
+            metadata
+        );
+        let initial_safety_deposit_balance = primary_fungible_store::balance(
+            RECIPIENT,
+            locked_asset::safety_deposit_metadata_for_test()
+        );
 
         let locked_asset = locked_asset::new_from_user(
             &recipient,
@@ -82,11 +95,19 @@ module fusion_plus::locked_asset_tests {
         assert!(locked_asset::get_recipient(locked_asset) == RECIPIENT, 0);
         assert!(locked_asset::get_resolver(locked_asset) == option::none(), 0);
 
-        // Record initial balance
-        let initial_balance = primary_fungible_store::balance(
-            RECIPIENT,
-            metadata
+        // Verify safety deposit was transferred to locked asset
+        let safety_deposit_at_object = primary_fungible_store::balance(
+            locked_asset_address,
+            locked_asset::safety_deposit_metadata_for_test()
         );
+        assert!(safety_deposit_at_object == locked_asset::safety_deposit_amount_for_test(), 0);
+
+        // Verify user's safety deposit balance decreased
+        let user_safety_deposit_after_creation = primary_fungible_store::balance(
+            RECIPIENT,
+            locked_asset::safety_deposit_metadata_for_test()
+        );
+        assert!(user_safety_deposit_after_creation == initial_safety_deposit_balance - locked_asset::safety_deposit_amount_for_test(), 0);
 
         // Verify the object exists
         assert!(object::object_exists<LockedAsset>(locked_asset_address) == true, 0);
@@ -97,21 +118,27 @@ module fusion_plus::locked_asset_tests {
         // Verify the object is deleted
         assert!(object::object_exists<LockedAsset>(locked_asset_address) == false, 0);
 
-        // Verify recipient received the funds back
-        let final_balance = primary_fungible_store::balance(
+        // Verify recipient received the main asset back
+        let final_main_balance = primary_fungible_store::balance(
             RECIPIENT,
             metadata
         );
-        assert!(final_balance == initial_balance + ASSET_AMOUNT, 0);
+        assert!(final_main_balance == initial_main_balance + ASSET_AMOUNT, 0);
 
+        // Verify safety deposit is returned
+        let final_safety_deposit_balance = primary_fungible_store::balance(
+            RECIPIENT,
+            locked_asset::safety_deposit_metadata_for_test()
+        );
+        assert!(final_safety_deposit_balance == initial_safety_deposit_balance, 0);
     }
 
     #[test]
     #[expected_failure(abort_code = locked_asset::EINVALID_CALLER)]
     fun test_user_destroy_order_wrong_caller() {
-        let (owner, metadata, mint_ref) = setup_test();
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
 
-        let recipient = account::create_account_for_test(RECIPIENT);
+
         let wrong_caller = account::create_account_for_test(@0x999);
         let asset = fungible_asset::mint(&mint_ref, ASSET_AMOUNT);
 
@@ -128,9 +155,18 @@ module fusion_plus::locked_asset_tests {
 
     #[test]
     fun test_user_destroy_order_multiple_orders() {
-        let (owner, metadata, mint_ref) = setup_test();
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
 
-        let recipient = account::create_account_for_test(RECIPIENT);
+        // Record initial balances
+        let initial_main_balance = primary_fungible_store::balance(
+            RECIPIENT,
+            metadata
+        );
+        let initial_safety_deposit_balance = primary_fungible_store::balance(
+            RECIPIENT,
+            locked_asset::safety_deposit_metadata_for_test()
+        );
+
         let asset1 = fungible_asset::mint(&mint_ref, ASSET_AMOUNT);
         let asset2 = fungible_asset::mint(&mint_ref, ASSET_AMOUNT * 2);
 
@@ -148,39 +184,53 @@ module fusion_plus::locked_asset_tests {
             CHAIN_ID
         );
 
-        // Record initial balance
-        let initial_balance = primary_fungible_store::balance(
+        let safety_deposit_after_creation = primary_fungible_store::balance(
             RECIPIENT,
-            metadata
+            locked_asset::safety_deposit_metadata_for_test()
         );
+        assert!(safety_deposit_after_creation == initial_safety_deposit_balance - locked_asset::safety_deposit_amount_for_test() * 2, 0);
 
         // Destroy first order
         locked_asset::user_destroy_order(&recipient, locked_asset1);
 
-        // Verify first order funds returned
+        // Verify first order main asset returned
         let balance_after_first = primary_fungible_store::balance(
             RECIPIENT,
             metadata
         );
-        assert!(balance_after_first == initial_balance + ASSET_AMOUNT, 0);
+        assert!(balance_after_first == initial_main_balance + ASSET_AMOUNT, 0);
+
+        // Verify first order safety deposit returned
+        let safety_deposit_after_first_destroy = primary_fungible_store::balance(
+            RECIPIENT,
+            locked_asset::safety_deposit_metadata_for_test()
+        );
+        assert!(safety_deposit_after_first_destroy == safety_deposit_after_creation + locked_asset::safety_deposit_amount_for_test(), 0);
+
 
         // Destroy second order
         locked_asset::user_destroy_order(&recipient, locked_asset2);
 
-        // Verify second order funds returned
-        let final_balance = primary_fungible_store::balance(
+        // Verify second order main asset returned
+        let final_main_balance = primary_fungible_store::balance(
             RECIPIENT,
             metadata
         );
-        assert!(final_balance == initial_balance + ASSET_AMOUNT + ASSET_AMOUNT * 2, 0);
+        assert!(final_main_balance == initial_main_balance + ASSET_AMOUNT + ASSET_AMOUNT * 2, 0);
+
+        // Verify second order safety deposit returned
+        let final_safety_deposit_balance = primary_fungible_store::balance(
+            RECIPIENT,
+            locked_asset::safety_deposit_metadata_for_test()
+        );
+        assert!(final_safety_deposit_balance == initial_safety_deposit_balance, 0);
     }
 
     #[test]
     fun test_user_destroy_order_different_recipients() {
-        let (owner, metadata, mint_ref) = setup_test();
+        let (owner, recipient1, resolver, metadata, mint_ref) = setup_test();
 
-        let recipient1 = account::create_account_for_test(RECIPIENT);
-        let recipient2 = account::create_account_for_test(@0x4);
+        let recipient2 = common::initialize_account_with_fa(@0x4);
         let asset1 = fungible_asset::mint(&mint_ref, ASSET_AMOUNT);
         let asset2 = fungible_asset::mint(&mint_ref, ASSET_AMOUNT * 2);
 
@@ -228,9 +278,9 @@ module fusion_plus::locked_asset_tests {
 
     #[test]
     fun test_user_destroy_order_large_amount() {
-        let (owner, metadata, mint_ref) = setup_test();
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
 
-        let recipient = account::create_account_for_test(RECIPIENT);
+
         let large_amount = 1000000000000; // 1M tokens
         let asset = fungible_asset::mint(&mint_ref, large_amount);
 
@@ -260,9 +310,9 @@ module fusion_plus::locked_asset_tests {
 
     #[test]
     fun test_user_destroy_order_after_random_deposit() {
-        let (owner, metadata, mint_ref) = setup_test();
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
 
-        let recipient = account::create_account_for_test(RECIPIENT);
+
 
         let asset = fungible_asset::mint(&mint_ref, ASSET_AMOUNT);
 
@@ -275,10 +325,14 @@ module fusion_plus::locked_asset_tests {
 
         let locked_asset_address = object::object_address(&locked_asset);
 
-        // Record initial balance of recipient
+        // Record initial balances
         let initial_recipient_balance = primary_fungible_store::balance(
             RECIPIENT,
             metadata
+        );
+        let initial_safety_deposit_balance = primary_fungible_store::balance(
+            RECIPIENT,
+            locked_asset::safety_deposit_metadata_for_test()
         );
 
         // Record initial balance of locked asset
@@ -312,12 +366,21 @@ module fusion_plus::locked_asset_tests {
         // Verify the object is deleted
         assert!(object::object_exists<LockedAsset>(locked_asset_address) == false, 0);
 
-        // Verify recipient received the funds back
+        // Verify recipient received the main asset back
         let final_recipient_balance = primary_fungible_store::balance(
             RECIPIENT,
             metadata
         );
         assert!(final_recipient_balance == initial_recipient_balance + ASSET_AMOUNT, 0);
+
+        // Verify safety deposit is also returned
+        let final_safety_deposit_balance = primary_fungible_store::balance(
+            RECIPIENT,
+            locked_asset::safety_deposit_metadata_for_test()
+        );
+
+        debug::print(&final_safety_deposit_balance);
+        assert!(final_safety_deposit_balance == initial_safety_deposit_balance + locked_asset::safety_deposit_amount_for_test(), 0);
 
         let fa_supply_after_destroying_locked_asset = option::destroy_some(fungible_asset::supply(metadata)) as u64;
         assert!(fa_supply_after_destroying_locked_asset == ASSET_AMOUNT + extra_amount, 0);
@@ -340,9 +403,9 @@ module fusion_plus::locked_asset_tests {
 
     #[test]
     fun test_user_destroy_order_with_unrelated_fa_lost() {
-        let (owner, metadata, mint_ref) = setup_test();
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
 
-        let recipient = account::create_account_for_test(RECIPIENT);
+
 
         // Create a second FA
         let (metadata2, mint_ref2) = common::create_test_token(&owner, b"Unrelated Token");
@@ -390,10 +453,10 @@ module fusion_plus::locked_asset_tests {
 
     #[test]
     fun test_user_destroy_order_with_unrelated_fa_swept() {
-        let (owner, metadata, mint_ref) = setup_test();
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
         let fusion_signer = account::create_account_for_test(@fusion_plus);
 
-        let recipient = account::create_account_for_test(RECIPIENT);
+
 
         // Create a second FA
         let (metadata2, mint_ref2) = common::create_test_token(&owner, b"Unrelated Token");
@@ -444,9 +507,9 @@ module fusion_plus::locked_asset_tests {
     #[test]
     #[expected_failure(abort_code = locked_asset::ENOT_ADMIN)]
     fun test_sweep_other_asset_wrong_caller() {
-        let (owner, metadata, mint_ref) = setup_test();
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
 
-        let recipient = account::create_account_for_test(RECIPIENT);
+
         let wrong_caller = account::create_account_for_test(@0x999);
 
         // Create a second FA
@@ -473,10 +536,10 @@ module fusion_plus::locked_asset_tests {
 
     #[test]
     fun test_sweep_other_asset_main_fa_not_swept() {
-        let (owner, metadata, mint_ref) = setup_test();
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
         let fusion_signer = account::create_account_for_test(@fusion_plus);
 
-        let recipient = account::create_account_for_test(RECIPIENT);
+
 
         // Create a second FA
         let (metadata2, mint_ref2) = common::create_test_token(&owner, b"Unrelated Token");
@@ -545,9 +608,9 @@ module fusion_plus::locked_asset_tests {
 
     #[test]
     fun test_sweep_other_asset_multiple_unrelated_fas() {
-        let (owner, metadata, mint_ref) = setup_test();
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
         let fusion_signer = account::create_account_for_test(@fusion_plus);
-        let recipient = account::create_account_for_test(RECIPIENT);
+
 
         // Create multiple unrelated FAs
         let (metadata2, mint_ref2) = common::create_test_token(&owner, b"Unrelated Token 1");
@@ -609,10 +672,10 @@ module fusion_plus::locked_asset_tests {
 
     #[test]
     fun test_sweep_other_asset_nonexistent_asset() {
-        let (owner, metadata, mint_ref) = setup_test();
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
         let fusion_signer = account::create_account_for_test(@fusion_plus);
 
-        let recipient = account::create_account_for_test(RECIPIENT);
+
 
         // Create a second FA
         let (metadata2, mint_ref2) = common::create_test_token(&owner, b"Unrelated Token");
@@ -641,10 +704,10 @@ module fusion_plus::locked_asset_tests {
 
     #[test]
     fun test_sweep_other_asset_zero_balance() {
-        let (owner, metadata, mint_ref) = setup_test();
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
         let fusion_signer = account::create_account_for_test(@fusion_plus);
 
-        let recipient = account::create_account_for_test(RECIPIENT);
+
 
         // Create a second FA
         let (metadata2, mint_ref2) = common::create_test_token(&owner, b"Unrelated Token");
