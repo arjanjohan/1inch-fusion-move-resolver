@@ -1,7 +1,5 @@
 #[test_only]
 module fusion_plus::timelock_tests {
-    use std::vector;
-    use std::debug;
     use aptos_framework::timestamp;
     use aptos_framework::account;
     use fusion_plus::timelock;

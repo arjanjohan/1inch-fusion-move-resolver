@@ -2,12 +2,10 @@ module fusion_plus::locked_asset {
 
     use std::option::{Self, Option};
     use std::signer;
-    use std::debug;
-    use aptos_framework::event::{Self, EventHandle};
+    use aptos_framework::event::{Self};
     use aptos_framework::fungible_asset::{Self, FungibleAsset, Metadata};
     use aptos_framework::object::{Self, Object, ExtendRef, DeleteRef, ObjectGroup};
     use aptos_framework::primary_fungible_store;
-    use aptos_framework::timestamp;
 
     use fusion_plus::hashlock::{Self, HashLock};
     use fusion_plus::timelock::{Self, Timelock};
@@ -135,7 +133,6 @@ module fusion_plus::locked_asset {
     }
 
     fun init_module(owner: &signer) {
-        let owner_addr = signer::address_of(owner);
         move_to(owner, GlobalConfig {
             finality_duration: DEFAULT_FINALITY_DURATION,
             exclusive_duration: DEFAULT_EXCLUSIVE_DURATION,
@@ -220,12 +217,11 @@ module fusion_plus::locked_asset {
         assert!(fungible_asset::amount(&asset) > 0, EINVALID_ASSET);
         assert!(chain_id > 0, EINVALID_CHAIN);
 
-        let owner_addr = signer::address_of(owner);
         let metadata = fungible_asset::metadata_from_asset(&asset);
         let amount = fungible_asset::amount(&asset);
 
         // Create the object and LockedAsset
-        let constructor_ref = object::create_object_from_account(owner); // TODO do we need owner to create obj?
+        let constructor_ref = object::create_object_from_account(owner);
         let object_signer = object::generate_signer(&constructor_ref);
         let extend_ref = object::generate_extend_ref(&constructor_ref);
         let delete_ref = object::generate_delete_ref(&constructor_ref);
@@ -295,26 +291,26 @@ module fusion_plus::locked_asset {
         );
     }
 
-    public(friend) fun withdraw_funds_on_source_chain(
-        signer: &signer,
-        locked_asset: Object<LockedAsset>,
-        secret: vector<u8>
-    ) acquires LockedAsset {
-        let locked_asset_ref = borrow_locked_asset_mut(&locked_asset);
-        let hashlock = locked_asset_ref.hashlock;
+    // public(friend) fun withdraw_funds_on_source_chain(
+    //     signer: &signer,
+    //     locked_asset: Object<LockedAsset>,
+    //     secret: vector<u8>
+    // ) acquires LockedAsset {
+    //     let locked_asset_ref = borrow_locked_asset_mut(&locked_asset);
+    //     let hashlock = locked_asset_ref.hashlock;
 
-    }
+    // }
 
 
-    public(friend) fun withdraw_funds_on_destination_chain(
-        signer: &signer,
-        locked_asset: Object<LockedAsset>,
-        secret: vector<u8>
-    ) acquires LockedAsset {
-        let locked_asset_ref = borrow_locked_asset_mut(&locked_asset);
-        let hashlock = locked_asset_ref.hashlock;
+    // public(friend) fun withdraw_funds_on_destination_chain(
+    //     signer: &signer,
+    //     locked_asset: Object<LockedAsset>,
+    //     secret: vector<u8>
+    // ) acquires LockedAsset {
+    //     let locked_asset_ref = borrow_locked_asset_mut(&locked_asset);
+    //     let hashlock = locked_asset_ref.hashlock;
 
-    }
+    // }
 
     // this function can only be called before the resolver picks up the order.
     public(friend) fun user_destroy_order(
@@ -324,12 +320,13 @@ module fusion_plus::locked_asset {
         let locked_asset_ref = borrow_locked_asset_mut(&locked_asset);
 
         let signer_address = signer::address_of(signer);
+        let locked_asset_address = object::object_address(&locked_asset);
 
         assert!(signer_address == locked_asset_ref.recipient, EINVALID_CALLER);
         assert!(option::is_none(&locked_asset_ref.timelock), EINVALID_PHASE);
         assert!(option::is_none(&locked_asset_ref.resolver), EINVALID_PHASE);
 
-        let LockedAssetController { extend_ref, delete_ref } = move_from(signer_address);
+        let LockedAssetController { extend_ref, delete_ref } = move_from(locked_asset_address);
 
         let object_signer = object::generate_signer_for_extending(&extend_ref);
 
@@ -340,8 +337,121 @@ module fusion_plus::locked_asset {
             locked_asset_ref.amount
         );
 
+        // Sweep any remaining balance to the contract
+        let remaining_balance = primary_fungible_store::balance(
+            locked_asset_address,
+            locked_asset_ref.metadata
+        );
+        primary_fungible_store::transfer(
+            &object_signer,
+            locked_asset_ref.metadata,
+            @fusion_plus,
+            remaining_balance
+        );
+
         object::delete(delete_ref);
-        // TODO: Do we need to ensure there are no lingering objects? primary stores that are not empty?
+    }
+
+
+    // - - - - VIEW FUNCTIONS - - - -
+
+    #[view]
+    /// Gets the recipient of the locked asset.
+    ///
+    /// @param locked_asset The LockedAsset to get recipient from.
+    /// @return Option<address> The recipient address.
+    public fun get_recipient(locked_asset_obj: Object<LockedAsset>): address acquires LockedAsset {
+        borrow_locked_asset(&locked_asset_obj).recipient
+    }
+
+    #[view]
+    /// Gets the resolver of the locked asset.
+    ///
+    /// @param locked_asset The LockedAsset to get resolver from.
+    /// @return Option<address> The resolver address.
+    public fun get_resolver(locked_asset_obj: Object<LockedAsset>): Option<address> acquires LockedAsset {
+        borrow_locked_asset(&locked_asset_obj).resolver
+    }
+
+    #[view]
+    /// Gets the metadata of the locked asset.
+    ///
+    /// @param locked_asset The LockedAsset to get metadata from.
+    /// @return Object<Metadata> The metadata object.
+    public fun get_metadata(locked_asset_obj: Object<LockedAsset>): Object<Metadata> acquires LockedAsset {
+        borrow_locked_asset(&locked_asset_obj).metadata
+    }
+
+    #[view]
+    /// Gets the amount of the locked asset.
+    ///
+    /// @param locked_asset The LockedAsset to get amount from.
+    /// @return u64 The amount.
+    public fun get_amount(locked_asset_obj: Object<LockedAsset>): u64 acquires LockedAsset {
+        borrow_locked_asset(&locked_asset_obj).amount
+    }
+
+    #[view]
+    /// Gets the creation timestamp of the locked asset.
+    ///
+    /// @param locked_asset The LockedAsset to get timestamp from.
+    /// @return u64 The creation timestamp in seconds.
+    public fun get_created_at(locked_asset_obj: Object<LockedAsset>): u64 acquires LockedAsset {
+        let locked_asset = borrow_locked_asset(&locked_asset_obj);
+        if (option::is_some(&locked_asset.timelock)) {
+            timelock::get_created_at(option::borrow(&locked_asset.timelock))
+        } else {
+            0
+        }
+    }
+
+    #[view]
+    /// Gets the chain ID of the locked asset.
+    ///
+    /// @param locked_asset The LockedAsset to get chain ID from.
+    /// @return u64 The chain ID.
+    public fun get_chain_id(locked_asset_obj: Object<LockedAsset>): u64 acquires LockedAsset {
+        borrow_locked_asset(&locked_asset_obj).chain_id
+    }
+
+    #[view]
+    /// Checks if the LockedAsset is in the finality phase.
+    ///
+    /// @param locked_asset The LockedAsset to check.
+    /// @return bool True if in finality phase, false otherwise.
+    public fun is_timelock_active(locked_asset_obj: Object<LockedAsset>): bool acquires LockedAsset {
+        let locked_asset = borrow_locked_asset(&locked_asset_obj);
+        option::is_some(&locked_asset.timelock)
+    }
+
+    #[view]
+    /// Checks if the LockedAsset is in the finality phase.
+    ///
+    /// @param locked_asset The LockedAsset to check.
+    /// @return bool True if in finality phase, false otherwise.
+    public fun is_in_finality_phase(locked_asset_obj: Object<LockedAsset>): bool acquires LockedAsset {
+        let locked_asset = borrow_locked_asset(&locked_asset_obj);
+        option::is_some(&locked_asset.timelock) && timelock::is_in_finality_phase(option::borrow(&locked_asset.timelock))
+    }
+
+    #[view]
+    /// Checks if the LockedAsset is in the finality phase.
+    ///
+    /// @param locked_asset The LockedAsset to check
+    /// @return bool True if in finality phase, false otherwise.
+    public fun is_in_exclusive_phase(locked_asset_obj: Object<LockedAsset>): bool acquires LockedAsset {
+        let locked_asset = borrow_locked_asset(&locked_asset_obj);
+        option::is_some(&locked_asset.timelock) && timelock::is_in_exclusive_phase(option::borrow(&locked_asset.timelock))
+    }
+
+    #[view]
+    /// Checks if the LockedAsset is in the finality phase.
+    ///
+    /// @param locked_asset The LockedAsset to check.
+    /// @return bool True if in finality phase, false otherwise.
+    public fun is_in_private_cancellation_phase(locked_asset_obj: Object<LockedAsset>): bool acquires LockedAsset {
+        let locked_asset = borrow_locked_asset(&locked_asset_obj);
+        option::is_some(&locked_asset.timelock) && timelock::is_in_private_cancellation_phase(option::borrow(&locked_asset.timelock))
     }
 
 
@@ -366,6 +476,36 @@ module fusion_plus::locked_asset {
         config.private_cancellation_duration = private_cancellation_duration;
     }
 
+    public fun sweep_other_asset(
+        signer: &signer,
+        locked_asset: Object<LockedAsset>,
+        other_metadata: Object<Metadata>
+    ) acquires LockedAsset, LockedAssetController {
+        assert!(signer::address_of(signer) == @fusion_plus, ENOT_ADMIN);
+
+        // Dont allow sweeping the same asset
+        let locked_asset_ref = borrow_locked_asset_mut(&locked_asset);
+        assert!(locked_asset_ref.metadata != other_metadata, EINVALID_ASSET);
+
+        let locked_asset_address = object::object_address(&locked_asset);
+        let controller = borrow_locked_asset_controller(&locked_asset);
+
+        let object_signer = object::generate_signer_for_extending(&controller.extend_ref);
+
+        // Sweep any remaining balance to the contract
+        let remaining_balance = primary_fungible_store::balance(
+            locked_asset_address,
+            other_metadata
+        );
+        primary_fungible_store::transfer(
+            &object_signer,
+            other_metadata,
+            @fusion_plus,
+            remaining_balance
+        );
+
+    }
+
     // ========== Helper Functions ==========
 
     inline fun borrow_locked_asset(locked_asset_obj: &Object<LockedAsset>): &LockedAsset acquires LockedAsset {
@@ -386,9 +526,5 @@ module fusion_plus::locked_asset {
 
     // - - - - TEST FUNCTIONS - - - -
 
-    // #[test_only]
-    // public fun destroy_locked_asset_for_test(locked_asset: LockedAsset) {
-    //     // TODO: Implement
-    // }
 
 }

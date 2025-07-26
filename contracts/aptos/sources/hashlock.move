@@ -1,8 +1,6 @@
 module fusion_plus::hashlock {
     use std::hash;
     use std::vector;
-    use aptos_framework::event;
-    use aptos_framework::timestamp;
 
     // - - - - ERROR CODES - - - -
 
