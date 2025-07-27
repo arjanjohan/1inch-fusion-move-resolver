@@ -1,5 +1,6 @@
 module fusion_plus::timelock {
     use aptos_framework::timestamp;
+    use fusion_plus::constants;
 
     /// Error codes
     const EINVALID_DURATION: u64 = 1;
@@ -35,10 +36,20 @@ module fusion_plus::timelock {
         created_at: u64,
         finality_duration: u64,
         exclusive_duration: u64,
-        private_cancellation_duration: u64,
+        private_cancellation_duration: u64
     }
 
-        /// Creates a new Timelock with the specified durations.
+    public fun new(): Timelock {
+        let finality_duration = constants::get_finality_duration();
+        let exclusive_duration = constants::get_exclusive_duration();
+        let private_cancellation_duration =
+            constants::get_private_cancellation_duration();
+        new_internal(
+            finality_duration, exclusive_duration, private_cancellation_duration
+        )
+    }
+
+    /// Creates a new Timelock with the specified durations.
     ///
     /// @param finality_duration Duration of finality phase in seconds.
     /// @param exclusive_duration Duration of exclusive phase in seconds.
@@ -46,24 +57,28 @@ module fusion_plus::timelock {
     ///
     /// @reverts EINVALID_DURATION if any duration is zero or outside valid range.
     /// @reverts EOVERFLOW if duration calculations would overflow.
-    public fun new(
-        finality_duration: u64,
-        exclusive_duration: u64,
-        private_cancellation_duration: u64,
+    public fun new_internal(
+        finality_duration: u64, exclusive_duration: u64, private_cancellation_duration: u64
     ): Timelock {
         // Validate each phase duration individually
         assert!(finality_duration >= MIN_FINALITY_DURATION, EINVALID_DURATION);
         assert!(finality_duration <= MAX_FINALITY_DURATION, EINVALID_DURATION);
         assert!(exclusive_duration >= MIN_EXCLUSIVE_DURATION, EINVALID_DURATION);
         assert!(exclusive_duration <= MAX_EXCLUSIVE_DURATION, EINVALID_DURATION);
-        assert!(private_cancellation_duration >= MIN_PRIVATE_CANCELLATION_DURATION, EINVALID_DURATION);
-        assert!(private_cancellation_duration <= MAX_PRIVATE_CANCELLATION_DURATION, EINVALID_DURATION);
+        assert!(
+            private_cancellation_duration >= MIN_PRIVATE_CANCELLATION_DURATION,
+            EINVALID_DURATION
+        );
+        assert!(
+            private_cancellation_duration <= MAX_PRIVATE_CANCELLATION_DURATION,
+            EINVALID_DURATION
+        );
 
         Timelock {
             created_at: timestamp::now_seconds(),
             finality_duration,
             exclusive_duration,
-            private_cancellation_duration,
+            private_cancellation_duration
         }
     }
 
@@ -75,7 +90,8 @@ module fusion_plus::timelock {
         let now = timestamp::now_seconds();
         let finality_end = timelock.created_at + timelock.finality_duration;
         let exclusive_end = finality_end + timelock.exclusive_duration;
-        let private_cancellation_end = exclusive_end + timelock.private_cancellation_duration;
+        let private_cancellation_end =
+            exclusive_end + timelock.private_cancellation_duration;
 
         if (now < finality_end) {
             PHASE_FINALITY
@@ -96,7 +112,8 @@ module fusion_plus::timelock {
         let now = timestamp::now_seconds();
         let finality_end = timelock.created_at + timelock.finality_duration;
         let exclusive_end = finality_end + timelock.exclusive_duration;
-        let private_cancellation_end = exclusive_end + timelock.private_cancellation_duration;
+        let private_cancellation_end =
+            exclusive_end + timelock.private_cancellation_duration;
 
         if (now < finality_end) {
             finality_end - now
@@ -104,9 +121,7 @@ module fusion_plus::timelock {
             exclusive_end - now
         } else if (now < private_cancellation_end) {
             private_cancellation_end - now
-        } else {
-            0
-        }
+        } else { 0 }
     }
 
     /// Gets the total duration of all phases.
@@ -114,7 +129,8 @@ module fusion_plus::timelock {
     /// @param timelock The Timelock to check.
     /// @return u64 The total duration in seconds.
     public fun get_total_duration(timelock: &Timelock): u64 {
-        timelock.finality_duration + timelock.exclusive_duration + timelock.private_cancellation_duration
+        timelock.finality_duration + timelock.exclusive_duration
+            + timelock.private_cancellation_duration
     }
 
     /// Gets the end time of the timelock (when it expires).
@@ -170,7 +186,11 @@ module fusion_plus::timelock {
     /// @param timelock The Timelock to get durations from.
     /// @return (u64, u64, u64) The finality, exclusive and cancellation durations in seconds.
     public fun get_durations(timelock: &Timelock): (u64, u64, u64) {
-        (timelock.finality_duration, timelock.exclusive_duration, timelock.private_cancellation_duration)
+        (
+            timelock.finality_duration,
+            timelock.exclusive_duration,
+            timelock.private_cancellation_duration
+        )
     }
 
     /// Checks if a finality duration is within valid bounds.
@@ -194,7 +214,8 @@ module fusion_plus::timelock {
     /// @param duration The duration to check in seconds.
     /// @return bool True if duration is valid, false otherwise.
     public fun is_private_cancellation_duration_valid(duration: u64): bool {
-        duration >= MIN_PRIVATE_CANCELLATION_DURATION && duration <= MAX_PRIVATE_CANCELLATION_DURATION
+        duration >= MIN_PRIVATE_CANCELLATION_DURATION
+            && duration <= MAX_PRIVATE_CANCELLATION_DURATION
     }
 
     #[test_only]
@@ -217,4 +238,12 @@ module fusion_plus::timelock {
         PHASE_PUBLIC_CANCELLATION
     }
 
+    #[test_only]
+    public fun new_for_test(
+        finality_duration: u64, exclusive_duration: u64, private_cancellation_duration: u64
+    ): Timelock {
+        new_internal(
+            finality_duration, exclusive_duration, private_cancellation_duration
+        )
+    }
 }

@@ -7,4 +7,7 @@ module fusion_plus::resolver_registry {
         true
     }
 
+    public fun init_module_for_test(_signer: &signer){
+
+    }
 }

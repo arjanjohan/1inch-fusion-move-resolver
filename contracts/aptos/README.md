@@ -4,25 +4,52 @@ A secure cross-chain atomic swap protocol built on Aptos that enables trustless 
 
 ## Overview
 
-The protocol enables secure cross-chain swaps through a combination of hacklocked and timelocked escrows. It consists of several key components:
+The protocol enables secure cross-chain swaps through a clean separation of concerns with hacklocked and timelocked escrows. It consists of several key components:
 
 ### Core Components
 
-1. **Locked Assets (`locked_asset.move`)**
-   - Escrow mechanism for locking assets
+1. **Fusion Orders (`fusion_order.move`)**
+   - User-created orders that can be cancelled before pickup
+   - Order creation with safety deposit requirements
+   - Order cancellation by owner
+   - Resolver pickup functionality for converting to escrow
+
+2. **Escrow (`escrow.move`)**
+   - Secure asset escrow with timelock and hashlock protection
+   - Two creation methods: from fusion order or directly from resolver
    - Timelock-based phase management
    - Hashlock-based secret verification
    - Asset withdrawal and cancellation logic
-
-2. **Fusion Orders (`fusion_order.move`)**
-   - Cross-chain order management
-   - Escrow creation and management
-   - Integration with resolver registry
 
 3. **Resolver Registry (`resolver_registry.move`)**
    - Resolver registration and status management
    - Access control for resolvers
    - Admin functions for resolver management
+
+4. **Timelock (`timelock.move`)**
+   - Phase management for escrow lifecycle
+   - Configurable duration validation
+   - Phase transition logic
+
+5. **Hashlock (`hashlock.move`)**
+   - Secret verification for asset withdrawal
+   - Hash-based security mechanism
+
+### Architecture Flow
+
+```
+User creates Fusion Order
+         ↓
+   [Can be cancelled by user]
+         ↓
+Resolver picks up order
+         ↓
+   Fusion Order → Escrow
+         ↓
+   [Timelock phases begin]
+         ↓
+   [Hashlock protection active]
+```
 
 ### Timelock Phases
 
@@ -36,11 +63,11 @@ The protocol enables secure cross-chain swaps through a combination of hacklocke
    - Only intended recipient can claim assets
    - Requires valid secret for withdrawal
 
-3. **Cancellation Phase**
+3. **Private Cancellation Phase**
    - Owner can cancel and reclaim assets
    - Requires no prior withdrawal
 
-4. **Public Phase**
+4. **Public Cancellation Phase**
    - Anyone with the correct secret can claim
    - Anyone can cancel if not claimed
 
@@ -49,14 +76,38 @@ The protocol enables secure cross-chain swaps through a combination of hacklocke
 ```
 aptos-contracts/
 ├── sources/                # Move smart contracts
-│   ├── locked_asset.move  # Asset escrow and locking
-│   ├── fusion_order.move  # Order management
+│   ├── fusion_order.move  # Order creation and management
+│   ├── escrow.move        # Asset escrow and locking
 │   ├── resolver_registry.move # Resolver management
 │   ├── timelock.move      # Phase management
-│   └── hashlock.move      # Secret verification
+│   ├── hashlock.move      # Secret verification
+│   └── constants.move     # Protocol constants
 ├── tests/                 # Contract tests
+│   ├── fusion_order_tests.move
+│   ├── escrow_tests.move
+│   ├── timelock_tests.move
+│   └── hashlock_tests.move
 └── Move.toml             # Project configuration
 ```
+
+## Key Features
+
+### Fusion Orders
+- **User Control**: Users can create and cancel orders before pickup
+- **Safety Deposit**: Required safety deposit for order creation
+- **Resolver Pickup**: Only active resolvers can pick up orders
+- **Asset Management**: Automatic asset transfer and safety deposit handling
+
+### Escrow System
+- **Dual Creation**: From fusion order or direct resolver creation
+- **Timelock Protection**: Time-based phase management
+- **Hashlock Security**: Secret-based withdrawal protection
+- **Asset Safety**: Secure asset storage with withdrawal controls
+
+### Separation of Concerns
+- **Fusion Order Phase**: User-controlled order lifecycle
+- **Escrow Phase**: Resolver-controlled escrow lifecycle
+- **Clean Transitions**: Seamless order-to-escrow conversion
 
 ## Requirements
 
@@ -86,13 +137,13 @@ aptos move publish --named-addresses fusion_plus=YOUR_ACCOUNT_ADDRESS
 
 <!-- TODO: Replace this with user friendly scripts -->
 
-
 ## TODO
 
 - Implement Aptos as destination chain
 - Implement Aptos as source chain
 - Partial fills
 - Full test coverage
+- More secure asset transfer between fusion_order and escrow
 
 ## Team
 

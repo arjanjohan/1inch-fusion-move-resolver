@@ -1,0 +1,473 @@
+module fusion_plus::fusion_order_tests {
+    use std::option::{Self};
+    use std::string::utf8;
+    use std::hash;
+    use std::debug;
+    use aptos_framework::account;
+    use aptos_framework::fungible_asset::{Self, Metadata, MintRef};
+    use aptos_framework::object::{Self, Object};
+    use aptos_framework::primary_fungible_store;
+    use aptos_framework::timestamp;
+    use fusion_plus::fusion_order::{Self, FusionOrder};
+    use fusion_plus::common;
+    use fusion_plus::constants;
+    use fusion_plus::escrow::{Self, Escrow};
+
+    // Test accounts
+    const OWNER: address = @0x1;
+    const RECIPIENT: address = @0x2;
+    const RESOLVER: address = @0x3;
+    const CHAIN_ID: u64 = 20;
+
+    // Test amounts
+    const MINT_AMOUNT: u64 = 100000000; // 100 token
+    const ASSET_AMOUNT: u64 = 1000000; // 1 token
+
+    // Test secrets and hashes
+    const TEST_SECRET: vector<u8> = b"my secret";
+    const WRONG_SECRET: vector<u8> = b"wrong secret";
+
+    fun setup_test(): (signer, signer, signer, Object<Metadata>, MintRef) {
+        timestamp::set_time_has_started_for_testing(
+            &account::create_signer_for_test(@aptos_framework)
+        );
+        let fusion_signer = account::create_account_for_test(@fusion_plus);
+
+        let owner = common::initialize_account_with_fa(OWNER);
+        let recipient = common::initialize_account_with_fa(RECIPIENT);
+        let resolver = common::initialize_account_with_fa(RESOLVER);
+
+        let (metadata, mint_ref) = common::create_test_token(&owner, b"Test Token");
+
+        common::mint_fa(&mint_ref, MINT_AMOUNT, OWNER);
+        common::mint_fa(&mint_ref, MINT_AMOUNT, RECIPIENT);
+        common::mint_fa(&mint_ref, MINT_AMOUNT, RESOLVER);
+
+        (owner, recipient, resolver, metadata, mint_ref)
+    }
+
+    #[test]
+    fun test_create_fusion_order() {
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+
+        let fusion_order =
+            fusion_order::new(
+                &owner,
+                metadata,
+                ASSET_AMOUNT,
+                CHAIN_ID,
+                hash::sha3_256(TEST_SECRET)
+            );
+
+        // Verify initial state
+        assert!(fusion_order::get_owner(fusion_order) == OWNER, 0);
+        assert!(fusion_order::get_metadata(fusion_order) == metadata, 0);
+        assert!(fusion_order::get_amount(fusion_order) == ASSET_AMOUNT, 0);
+        assert!(fusion_order::get_chain_id(fusion_order) == CHAIN_ID, 0);
+        assert!(fusion_order::get_hash(fusion_order) == hash::sha3_256(TEST_SECRET), 0);
+
+        // Verify safety deposit amount is correct
+        assert!(
+            fusion_order::get_safety_deposit_amount(fusion_order)
+                == constants::get_safety_deposit_amount(),
+            0
+        );
+        assert!(
+            fusion_order::get_safety_deposit_metadata(fusion_order)
+                == constants::get_safety_deposit_metadata(),
+            0
+        );
+
+        // Verify the object exists
+        let fusion_order_address = object::object_address(&fusion_order);
+        assert!(object::object_exists<FusionOrder>(fusion_order_address) == true, 0);
+
+        // Verify assets were transferred to the object
+        let object_main_balance =
+            primary_fungible_store::balance(fusion_order_address, metadata);
+        assert!(object_main_balance == ASSET_AMOUNT, 0);
+
+        let object_safety_deposit_balance =
+            primary_fungible_store::balance(
+                fusion_order_address,
+                constants::get_safety_deposit_metadata()
+            );
+        assert!(
+            object_safety_deposit_balance == constants::get_safety_deposit_amount(), 0
+        );
+    }
+
+    #[test]
+    fun test_cancel_fusion_order_happy_flow() {
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+
+        // Record initial balances
+        let initial_main_balance = primary_fungible_store::balance(OWNER, metadata);
+        let initial_safety_deposit_balance =
+            primary_fungible_store::balance(
+                OWNER,
+                constants::get_safety_deposit_metadata()
+            );
+
+        let fusion_order =
+            fusion_order::new(
+                &owner,
+                metadata,
+                ASSET_AMOUNT,
+                CHAIN_ID,
+                hash::sha3_256(TEST_SECRET)
+            );
+
+        let fusion_order_address = object::object_address(&fusion_order);
+
+        // Verify the object exists
+        assert!(object::object_exists<FusionOrder>(fusion_order_address) == true, 0);
+
+        // Owner cancels the order
+        fusion_order::cancel(&owner, fusion_order);
+
+        // Verify the object is deleted
+        assert!(object::object_exists<FusionOrder>(fusion_order_address) == false, 0);
+
+        // Verify owner received the main asset back
+        let final_main_balance = primary_fungible_store::balance(OWNER, metadata);
+        assert!(final_main_balance == initial_main_balance, 0);
+
+        // Verify safety deposit is returned
+        let final_safety_deposit_balance =
+            primary_fungible_store::balance(
+                OWNER,
+                constants::get_safety_deposit_metadata()
+            );
+        assert!(final_safety_deposit_balance == initial_safety_deposit_balance, 0);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = fusion_order::EINVALID_CALLER)]
+    fun test_cancel_fusion_order_wrong_caller() {
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+
+        let wrong_caller = account::create_account_for_test(@0x999);
+
+        let fusion_order =
+            fusion_order::new(
+                &owner,
+                metadata,
+                ASSET_AMOUNT,
+                CHAIN_ID,
+                hash::sha3_256(TEST_SECRET)
+            );
+
+        // Wrong caller tries to cancel the order
+        fusion_order::cancel(&wrong_caller, fusion_order);
+    }
+
+    #[test]
+    fun test_cancel_fusion_order_multiple_orders() {
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+
+        // Record initial balances
+        let initial_main_balance = primary_fungible_store::balance(OWNER, metadata);
+        let initial_safety_deposit_balance =
+            primary_fungible_store::balance(
+                OWNER,
+                constants::get_safety_deposit_metadata()
+            );
+
+        let fusion_order1 =
+            fusion_order::new(
+                &owner,
+                metadata,
+                ASSET_AMOUNT,
+                CHAIN_ID,
+                hash::sha3_256(TEST_SECRET)
+            );
+
+        let fusion_order2 =
+            fusion_order::new(
+                &owner,
+                metadata,
+                ASSET_AMOUNT * 2,
+                CHAIN_ID,
+                hash::sha3_256(WRONG_SECRET)
+            );
+
+        // Verify safety deposit was deducted for both orders
+        let safety_deposit_after_creation =
+            primary_fungible_store::balance(
+                OWNER,
+                constants::get_safety_deposit_metadata()
+            );
+        assert!(
+            safety_deposit_after_creation
+                == initial_safety_deposit_balance
+                    - constants::get_safety_deposit_amount() * 2,
+            0
+        );
+
+        // Cancel first order
+        fusion_order::cancel(&owner, fusion_order1);
+
+        // Verify first order safety deposit returned
+        let safety_deposit_after_first_cancel =
+            primary_fungible_store::balance(
+                OWNER,
+                constants::get_safety_deposit_metadata()
+            );
+        assert!(
+            safety_deposit_after_first_cancel
+                == safety_deposit_after_creation
+                    + constants::get_safety_deposit_amount(),
+            0
+        );
+
+        // Cancel second order
+        fusion_order::cancel(&owner, fusion_order2);
+
+        // Verify second order safety deposit returned
+        let final_safety_deposit_balance =
+            primary_fungible_store::balance(
+                OWNER,
+                constants::get_safety_deposit_metadata()
+            );
+        assert!(final_safety_deposit_balance == initial_safety_deposit_balance, 0);
+    }
+
+    #[test]
+    fun test_cancel_fusion_order_different_owners() {
+        let (owner1, owner2, _, metadata, mint_ref) = setup_test();
+
+        // Record initial balances
+        let initial_balance1 = primary_fungible_store::balance(OWNER, metadata);
+        let initial_balance2 = primary_fungible_store::balance(@0x4, metadata);
+
+        let fusion_order1 =
+            fusion_order::new(
+                &owner1,
+                metadata,
+                ASSET_AMOUNT,
+                CHAIN_ID,
+                hash::sha3_256(TEST_SECRET)
+            );
+
+        let fusion_order2 =
+            fusion_order::new(
+                &owner2,
+                metadata,
+                ASSET_AMOUNT * 2,
+                CHAIN_ID,
+                hash::sha3_256(WRONG_SECRET)
+            );
+
+        // Each owner cancels their own order
+        fusion_order::cancel(&owner1, fusion_order1);
+        fusion_order::cancel(&owner2, fusion_order2);
+
+        // Verify each owner received their funds back
+        let final_balance1 = primary_fungible_store::balance(OWNER, metadata);
+        let final_balance2 = primary_fungible_store::balance(@0x4, metadata);
+
+        assert!(final_balance1 == initial_balance1, 0);
+        assert!(final_balance2 == initial_balance2, 0);
+    }
+
+    #[test]
+    fun test_cancel_fusion_order_large_amount() {
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+
+        let large_amount = 1000000000000; // 1M tokens
+
+        common::mint_fa(&mint_ref, large_amount, OWNER);
+
+        // Record initial balance
+        let initial_balance = primary_fungible_store::balance(OWNER, metadata);
+
+        // Create the fusion order
+        let fusion_order =
+            fusion_order::new(
+                &owner,
+                metadata,
+                large_amount,
+                CHAIN_ID,
+                hash::sha3_256(TEST_SECRET)
+            );
+
+        // Owner cancels the order
+        fusion_order::cancel(&owner, fusion_order);
+
+        // Verify owner received the funds back
+        let final_balance = primary_fungible_store::balance(OWNER, metadata);
+        assert!(final_balance == initial_balance, 0);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = fusion_order::EINVALID_AMOUNT)]
+    fun test_create_fusion_order_zero_amount() {
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+
+        fusion_order::new(
+            &owner,
+            metadata,
+            0, // Zero amount should fail
+            CHAIN_ID,
+            hash::sha3_256(TEST_SECRET)
+        );
+    }
+
+    #[test]
+    #[expected_failure(abort_code = fusion_order::EINSUFFICIENT_BALANCE)]
+    fun test_create_fusion_order_insufficient_balance() {
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+
+        let insufficient_amount = 1000000000000000; // Amount larger than available balance
+
+        fusion_order::new(
+            &owner,
+            metadata,
+            insufficient_amount,
+            CHAIN_ID,
+            hash::sha3_256(TEST_SECRET)
+        );
+    }
+
+    #[test]
+    #[expected_failure(abort_code = fusion_order::EOBJECT_DOES_NOT_EXIST)]
+    fun test_simulate_order_pickup_with_delete_for_test() {
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+
+        let fusion_order =
+            fusion_order::new(
+                &owner,
+                metadata,
+                ASSET_AMOUNT,
+                CHAIN_ID,
+                hash::sha3_256(TEST_SECRET)
+            );
+
+        let fusion_order_address = object::object_address(&fusion_order);
+
+        // Verify the object exists
+        assert!(object::object_exists<FusionOrder>(fusion_order_address) == true, 0);
+
+        // Simulate order pickup (this would normally be done by a resolver/escrow)
+        fusion_order::delete_for_test(fusion_order);
+
+        // Verify the object is deleted
+        assert!(object::object_exists<FusionOrder>(fusion_order_address) == false, 0);
+
+        // Order cannot be cancelled after pickup/delete
+        fusion_order::cancel(&owner, fusion_order);
+    }
+
+    #[test]
+    #[expected_failure(abort_code = fusion_order::EOBJECT_DOES_NOT_EXIST)]
+    fun test_simulate_order_pickup_with_new_from_order() {
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+
+        // Create a fusion order
+        let fusion_order =
+            fusion_order::new(
+                &owner,
+                metadata,
+                ASSET_AMOUNT,
+                CHAIN_ID,
+                hash::sha3_256(TEST_SECRET)
+            );
+
+        let fusion_order_address = object::object_address(&fusion_order);
+
+        // Verify the fusion order exists
+        assert!(object::object_exists<FusionOrder>(fusion_order_address) == true, 0);
+
+        // Record initial balances
+        let initial_resolver_main_balance = primary_fungible_store::balance(
+            RESOLVER,
+            metadata
+        );
+        let initial_resolver_safety_deposit_balance = primary_fungible_store::balance(
+            RESOLVER,
+            constants::get_safety_deposit_metadata()
+        );
+
+        // Simulate order pickup using escrow::new_from_order
+        let escrow = escrow::new_from_order(&resolver, fusion_order);
+
+        let escrow_address = object::object_address(&escrow);
+
+        // Verify the fusion order is deleted
+        assert!(object::object_exists<FusionOrder>(fusion_order_address) == false, 0);
+
+        // Verify the escrow object is created
+        assert!(object::object_exists<Escrow>(escrow_address) == true, 0);
+
+        // Verify escrow object has the assets
+        let escrow_main_balance = primary_fungible_store::balance(
+            escrow_address,
+            metadata
+        );
+        let escrow_safety_deposit_balance = primary_fungible_store::balance(
+            escrow_address,
+            constants::get_safety_deposit_metadata()
+        );
+
+        assert!(escrow_main_balance == ASSET_AMOUNT, 0);
+        assert!(escrow_safety_deposit_balance == constants::get_safety_deposit_amount(), 0);
+
+        // Order cannot be cancelled after pickup/delete
+        fusion_order::cancel(&owner, fusion_order);
+    }
+
+    #[test]
+    fun test_fusion_order_safety_deposit_verification() {
+        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+
+        // Record initial safety deposit balance
+        let initial_safety_deposit_balance =
+            primary_fungible_store::balance(
+                OWNER,
+                constants::get_safety_deposit_metadata()
+            );
+
+        let fusion_order =
+            fusion_order::new(
+                &owner,
+                metadata,
+                ASSET_AMOUNT,
+                CHAIN_ID,
+                hash::sha3_256(TEST_SECRET)
+            );
+
+        // Verify safety deposit was transferred to fusion order
+        let fusion_order_address = object::object_address(&fusion_order);
+        let safety_deposit_at_object =
+            primary_fungible_store::balance(
+                fusion_order_address,
+                constants::get_safety_deposit_metadata()
+            );
+        assert!(safety_deposit_at_object == constants::get_safety_deposit_amount(), 0);
+
+        // Verify owner's safety deposit balance decreased
+        let owner_safety_deposit_after_creation =
+            primary_fungible_store::balance(
+                OWNER,
+                constants::get_safety_deposit_metadata()
+            );
+        assert!(
+            owner_safety_deposit_after_creation
+                == initial_safety_deposit_balance
+                    - constants::get_safety_deposit_amount(),
+            0
+        );
+
+        // Cancel the order
+        fusion_order::cancel(&owner, fusion_order);
+
+        // Verify safety deposit is returned
+        let final_safety_deposit_balance =
+            primary_fungible_store::balance(
+                OWNER,
+                constants::get_safety_deposit_metadata()
+            );
+        assert!(final_safety_deposit_balance == initial_safety_deposit_balance, 0);
+    }
+}
