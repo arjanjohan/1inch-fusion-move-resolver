@@ -83,9 +83,7 @@ module fusion_plus::hashlock {
     /// @reverts EINVALID_SECRET if the secret is empty.
     public fun create_hashlock_for_test(secret: vector<u8>): HashLock {
         assert!(is_valid_secret(&secret), EINVALID_SECRET);
-        HashLock {
-            hash: create_hash_for_test(secret)
-        }
+        HashLock { hash: create_hash_for_test(secret) }
     }
 
     #[test_only]
