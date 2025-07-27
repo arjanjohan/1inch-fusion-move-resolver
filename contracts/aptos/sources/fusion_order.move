@@ -441,6 +441,9 @@ module fusion_plus::fusion_order {
     // - - - - TEST FUNCTIONS - - - -
 
     #[test_only]
+    friend fusion_plus::fusion_order_tests;
+
+    #[test_only]
     /// Deletes a fusion order for testing purposes.
     /// Burns the assets instead of returning them to simulate order pickup.
     ///

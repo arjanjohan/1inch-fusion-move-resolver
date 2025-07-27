@@ -456,6 +456,15 @@ module fusion_plus::escrow {
         escrow_ref.hashlock
     }
 
+    /// Checks if an escrow is on the source chain.
+    ///
+    /// @param escrow The escrow to check.
+    /// @return bool True if the escrow is on the source chain, false otherwise.
+    public fun is_source_chain(escrow: Object<Escrow>): bool acquires Escrow {
+        let escrow_ref = borrow_escrow(&escrow);
+        escrow_ref.to == escrow_ref.resolver
+    }
+
     // - - - - UTILITY FUNCTIONS - - - -
 
     /// Checks if an escrow exists.
