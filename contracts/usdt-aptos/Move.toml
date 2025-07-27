@@ -1,0 +1,16 @@
+[package]
+name = "usdt"
+version = "0.0.0"
+
+[addresses]
+admin = "0xd7722b8d2a024a318284288409557f6f14ff9b34026949de11ed2dd671475c92"
+usdt = "0xd7722b8d2a024a318284288409557f6f14ff9b34026949de11ed2dd671475c92" # --object-address
+
+[dev-addresses]
+admin = "0x9f73f71584332614ea07a1d04b18b838cae48724d890404259d289ea0ccf1937"
+usdt = "0xcafe"
+
+[dependencies.AptosFramework]
+git = "https://github.com/aptos-labs/aptos-core.git"
+rev = "mainnet"
+subdir = "aptos-move/framework/aptos-framework"
