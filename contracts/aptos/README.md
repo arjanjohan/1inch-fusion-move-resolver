@@ -1,5 +1,7 @@
 # Cross-Chain Atomic Swap Protocol
 
+![Logo](../../assets/logo.png)
+
 A secure cross-chain atomic swap protocol built on Aptos that enables trustless asset swaps across different blockchains. This is the Aptos implementation of the [1inch Fusion Plus](https://github.com/1inch/cross-chain-swap) protocol.
 
 ## Overview
@@ -146,4 +148,10 @@ aptos move publish --named-addresses fusion_plus=YOUR_ACCOUNT_ADDRESS
 ## Team
 
 Built during the 1inch & ETHGlobal Unite DeFi hackathon by:
-- [arjanjohan](https://x.com/arjanjohan/)
+
+<div>
+  <img src="../../assets/milady.jpg" alt="Logo" width="120" height="120" style="border-radius: 50%; object-fit: cover; ">
+
+  - [arjanjohan](https://x.com/arjanjohan/)
+</div>
+
