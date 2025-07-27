@@ -4,15 +4,15 @@ A secure cross-chain atomic swap protocol built on Aptos that enables trustless 
 
 ## Overview
 
-The protocol enables secure cross-chain swaps through a clean separation of concerns with hacklocked and timelocked escrows. It consists of several key components:
+The protocol enables secure cross-chain swaps through a clean separation of concerns with hashlocked and timelocked escrows. It consists of several key components that work together to provide a secure, trustless cross-chain swap experience.
 
 ### Core Components
 
 1. **Fusion Orders (`fusion_order.move`)**
    - User-created orders that can be cancelled before pickup
-   - Order creation with safety deposit requirements
+   - Includes safety deposit requirements
    - Order cancellation by owner
-   - Resolver pickup functionality for converting to escrow
+   - Friend function for converting to escrow
 
 2. **Escrow (`escrow.move`)**
    - Secure asset escrow with timelock and hashlock protection
@@ -20,94 +20,94 @@ The protocol enables secure cross-chain swaps through a clean separation of conc
    - Timelock-based phase management
    - Hashlock-based secret verification
    - Asset withdrawal and cancellation logic
+   - Source chain and destination chain handling
 
 3. **Resolver Registry (`resolver_registry.move`)**
    - Resolver registration and status management
-   - Access control for resolvers
    - Admin functions for resolver management
 
 4. **Timelock (`timelock.move`)**
    - Phase management for escrow lifecycle
    - Configurable duration validation
    - Phase transition logic
+   - Individual phase duration validation
 
 5. **Hashlock (`hashlock.move`)**
    - Secret verification for asset withdrawal
    - Hash-based security mechanism
 
+6. **Constants (`libs/constants.move`)**
+   - Protocol-wide configuration
+   - Safety deposit settings
+   - Timelock duration defaults
+
 ### Architecture Flow
 
 ```
+[SOURCE CHAIN]                       [DESTINATION CHAIN]
+
 User creates Fusion Order
          ↓
    [Can be cancelled by user]
          ↓
-Resolver picks up order
-         ↓
-   Fusion Order → Escrow
-         ↓
-   [Timelock phases begin]
-         ↓
-   [Hashlock protection active]
+Resolver picks up order           Resolver creates escrow
+         ↓                                   ↓
+   Fusion Order → Escrow                Escrow
+                     ↓                     ↓
+                    [Timelock phases begin]
+                                 ↓
+                    [Hashlock protection active]
+                                 ↓
+                    [Withdrawal or Recovery]
 ```
 
 ### Timelock Phases
 
-![Timelocks](../timelocks.png)
+![Timelocks](../../assets/timelocks.png)
 
 1. **Finality Phase**
    - Initial period where settings can be modified
    - Recipient can be set or updated
+   - No withdrawals allowed
 
 2. **Exclusive Phase**
    - Only intended recipient can claim assets
    - Requires valid secret for withdrawal
+   - Hashlock verification required
 
 3. **Private Cancellation Phase**
    - Owner can cancel and reclaim assets
    - Requires no prior withdrawal
+   - Admin-only recovery
 
 4. **Public Cancellation Phase**
    - Anyone with the correct secret can claim
    - Anyone can cancel if not claimed
+   - Public recovery available
 
 ## Project Structure
 
 ```
 aptos-contracts/
-├── sources/                # Move smart contracts
-│   ├── fusion_order.move  # Order creation and management
-│   ├── escrow.move        # Asset escrow and locking
+├── sources/                   # Move smart contracts
+│   ├── fusion_order.move      # Order creation and management
+│   ├── escrow.move            # Hashed timelocked Escrow logic
 │   ├── resolver_registry.move # Resolver management
-│   ├── timelock.move      # Phase management
-│   ├── hashlock.move      # Secret verification
-│   └── constants.move     # Protocol constants
-├── tests/                 # Contract tests
+│   ├── timelock.move          # Timelock management
+│   ├── hashlock.move          # Hashlock verification
+│   └── libs/
+│       └── constants.move     # Protocol constants
+├── tests/                     # Tests
 │   ├── fusion_order_tests.move
 │   ├── escrow_tests.move
+│   ├── resolver_registry_tests.move
 │   ├── timelock_tests.move
-│   └── hashlock_tests.move
-└── Move.toml             # Project configuration
+│   ├── hashlock_tests.move
+│   └── helpers/
+│       └── common.move        # Test utilities
+└── Move.toml                  # Project configuration
 ```
 
-## Key Features
-
-### Fusion Orders
-- **User Control**: Users can create and cancel orders before pickup
-- **Safety Deposit**: Required safety deposit for order creation
-- **Resolver Pickup**: Only active resolvers can pick up orders
-- **Asset Management**: Automatic asset transfer and safety deposit handling
-
-### Escrow System
-- **Dual Creation**: From fusion order or direct resolver creation
-- **Timelock Protection**: Time-based phase management
-- **Hashlock Security**: Secret-based withdrawal protection
-- **Asset Safety**: Secure asset storage with withdrawal controls
-
-### Separation of Concerns
-- **Fusion Order Phase**: User-controlled order lifecycle
-- **Escrow Phase**: Resolver-controlled escrow lifecycle
-- **Clean Transitions**: Seamless order-to-escrow conversion
 
 ## Requirements
 
@@ -139,11 +139,9 @@ aptos move publish --named-addresses fusion_plus=YOUR_ACCOUNT_ADDRESS
 
 ## TODO
 
-- Implement Aptos as destination chain
-- Implement Aptos as source chain
+- Local testing
+- Frontend
 - Partial fills
-- Full test coverage
-- More secure asset transfer between fusion_order and escrow
 
 ## Team
 

@@ -22,6 +22,8 @@ module fusion_plus::fusion_order {
     const EOBJECT_DOES_NOT_EXIST: u64 = 4;
     /// Invalid resolver
     const EINVALID_RESOLVER: u64 = 5;
+    /// Invalid hash
+    const EINVALID_HASH: u64 = 6;
 
     // - - - - EVENTS - - - -
 
@@ -88,6 +90,19 @@ module fusion_plus::fusion_order {
         hash: vector<u8>
     }
 
+    // - - - - ENTRY FUNCTIONS - - - -
+
+    /// Entry function for creating a new FusionOrder.
+    public entry fun new_entry(
+        signer: &signer,
+        metadata: Object<Metadata>,
+        amount: u64,
+        chain_id: u64,
+        hash: vector<u8>
+    ) {
+        new(signer, metadata, amount, chain_id, hash);
+    }
+
     // - - - - PUBLIC FUNCTIONS - - - -
 
     /// Creates a new FusionOrder with the specified parameters.
@@ -117,7 +132,7 @@ module fusion_plus::fusion_order {
         // Validate inputs
         assert!(amount > 0, EINVALID_AMOUNT);
         assert!(safety_deposit_amount > 0, EINVALID_AMOUNT);
-        assert!(is_valid_hash(&hash), EINVALID_AMOUNT);
+        assert!(is_valid_hash(&hash), EINVALID_HASH);
         assert!(
             primary_fungible_store::balance(signer_address, metadata) >= amount,
             EINSUFFICIENT_BALANCE
@@ -191,7 +206,7 @@ module fusion_plus::fusion_order {
     ///
     /// @reverts EOBJECT_DOES_NOT_EXIST if the fusion order does not exist.
     /// @reverts EINVALID_CALLER if the signer is not the order owner.
-    public fun cancel(
+    public entry fun cancel(
         signer: &signer, fusion_order: Object<FusionOrder>
     ) acquires FusionOrder, FusionOrderController {
         let signer_address = signer::address_of(signer);

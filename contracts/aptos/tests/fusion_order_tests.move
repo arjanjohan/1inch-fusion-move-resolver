@@ -315,7 +315,7 @@ module fusion_plus::fusion_order_tests {
     }
 
     #[test]
-    #[expected_failure(abort_code = fusion_order::EINVALID_AMOUNT)]
+    #[expected_failure(abort_code = fusion_order::EINVALID_HASH)]
     fun test_create_fusion_order_invalid_hash() {
         let (owner, _, _, metadata, _) = setup_test();
 

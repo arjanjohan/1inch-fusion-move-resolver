@@ -8,12 +8,12 @@ module fusion_plus::timelock {
 
     /// Boundaries for the timelock in seconds.
     // TODO: Figure out the best values for these boundaries.
-    const MIN_FINALITY_DURATION: u64 = 60; // 1 minute
-    const MAX_FINALITY_DURATION: u64 = 31536000; // 5 minutes
-    const MIN_EXCLUSIVE_DURATION: u64 = 60; // 1 minute
-    const MAX_EXCLUSIVE_DURATION: u64 = 31536000; // 5 minutes
+    const MIN_FINALITY_DURATION: u64 = 1; // 1 second
+    const MAX_FINALITY_DURATION: u64 = 60 * 60 * 24; // 1 day
+    const MIN_EXCLUSIVE_DURATION: u64 = 30; // 30 seconds
+    const MAX_EXCLUSIVE_DURATION: u64 = 60 * 60 * 24 * 30; // 30 days
     const MIN_PRIVATE_CANCELLATION_DURATION: u64 = 60; // 1 minute
-    const MAX_PRIVATE_CANCELLATION_DURATION: u64 = 31536000; // 5 minutes
+    const MAX_PRIVATE_CANCELLATION_DURATION: u64 = 60 * 60 * 24 * 30; // 30 days
 
     /// Phase constants
     const PHASE_FINALITY: u8 = 0;

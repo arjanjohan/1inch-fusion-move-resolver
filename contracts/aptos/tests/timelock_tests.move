@@ -184,8 +184,8 @@ module fusion_plus::timelock_tests {
         );
 
         // Test invalid durations (too short)
-        assert!(!timelock::is_finality_duration_valid(30), 0);
-        assert!(!timelock::is_exclusive_duration_valid(30), 0);
+        assert!(!timelock::is_finality_duration_valid(0), 0);
+        assert!(!timelock::is_exclusive_duration_valid(10), 0);
         assert!(!timelock::is_private_cancellation_duration_valid(30), 0);
 
         // Test invalid durations (too long)
@@ -219,7 +219,7 @@ module fusion_plus::timelock_tests {
     #[expected_failure(abort_code = timelock::EINVALID_DURATION)]
     fun test_create_timelock_too_short_finality() {
         setup_test();
-        timelock::new_for_test(30, EXCLUSIVE_DURATION, CANCELLATION_DURATION);
+        timelock::new_for_test(0, EXCLUSIVE_DURATION, CANCELLATION_DURATION);
     }
 
     #[test]
@@ -233,7 +233,7 @@ module fusion_plus::timelock_tests {
     #[expected_failure(abort_code = timelock::EINVALID_DURATION)]
     fun test_create_timelock_too_short_exclusive() {
         setup_test();
-        timelock::new_for_test(FINALITY_DURATION, 30, CANCELLATION_DURATION);
+        timelock::new_for_test(FINALITY_DURATION, 10, CANCELLATION_DURATION);
     }
 
     #[test]

@@ -76,7 +76,7 @@ module fusion_plus::resolver_registry {
     ///
     /// @reverts ENOT_AUTHORIZED if the signer is not the admin.
     /// @reverts EALREADY_REGISTERED if the resolver is already registered.
-    public fun register_resolver(signer: &signer, address: address) acquires ResolverRegistry {
+    public entry fun register_resolver(signer: &signer, address: address) acquires ResolverRegistry {
         assert_is_admin(signer);
         assert!(!resolver_exists(address), EALREADY_REGISTERED);
 
@@ -118,7 +118,7 @@ module fusion_plus::resolver_registry {
     /// @reverts ENOT_AUTHORIZED if the signer is not the admin.
     /// @reverts ENOT_REGISTERED if the resolver is not registered.
     /// @reverts EINVALID_STATUS_CHANGE if the resolver is already inactive.
-    public fun deactivate_resolver(signer: &signer, address: address) acquires ResolverRegistry {
+    public entry fun deactivate_resolver(signer: &signer, address: address) acquires ResolverRegistry {
         assert_is_admin(signer);
         assert!(resolver_exists(address), ENOT_REGISTERED);
 
@@ -150,7 +150,7 @@ module fusion_plus::resolver_registry {
     /// @reverts ENOT_AUTHORIZED if the signer is not the admin.
     /// @reverts ENOT_REGISTERED if the resolver is not registered.
     /// @reverts EINVALID_STATUS_CHANGE if the resolver is already active.
-    public fun reactivate_resolver(signer: &signer, address: address) acquires ResolverRegistry {
+    public entry fun reactivate_resolver(signer: &signer, address: address) acquires ResolverRegistry {
         assert_is_admin(signer);
         assert!(resolver_exists(address), ENOT_REGISTERED);
 
@@ -175,6 +175,7 @@ module fusion_plus::resolver_registry {
 
     // - - - - VIEW FUNCTIONS - - - -
 
+    #[view]
     /// Gets the registration timestamp of a resolver.
     ///
     /// @param resolver The address of the resolver.
@@ -185,6 +186,7 @@ module fusion_plus::resolver_registry {
         resolver_data.registered_at
     }
 
+    #[view]
     /// Gets the last status change timestamp of a resolver.
     ///
     /// @param resolver The address of the resolver.
@@ -195,6 +197,7 @@ module fusion_plus::resolver_registry {
         resolver_data.last_status_change
     }
 
+    #[view]
     /// Checks if a resolver is currently active.
     ///
     /// @param address The address of the resolver to check.
