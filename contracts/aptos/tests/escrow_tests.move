@@ -1,11 +1,9 @@
+#[test_only]
 module fusion_plus::escrow_tests {
-    use std::option::{Self};
-    use std::string::utf8;
     use std::hash;
-    use std::debug;
     use std::signer;
     use aptos_framework::account;
-    use aptos_framework::fungible_asset::{Self, Metadata, MintRef};
+    use aptos_framework::fungible_asset::{Metadata, MintRef};
     use aptos_framework::object::{Self, Object};
     use aptos_framework::primary_fungible_store;
     use aptos_framework::timestamp;
@@ -14,13 +12,10 @@ module fusion_plus::escrow_tests {
     use fusion_plus::common;
     use fusion_plus::constants;
     use fusion_plus::resolver_registry;
-    use fusion_plus::timelock::{Self, Timelock};
-    use fusion_plus::hashlock::{Self, HashLock};
+    use fusion_plus::timelock::{Self};
+    use fusion_plus::hashlock::{Self};
 
     // Test accounts
-    const OWNER: address = @0x1;
-    const RECIPIENT: address = @0x2;
-    const RESOLVER: address = @0x3;
     const CHAIN_ID: u64 = 20;
 
     // Test amounts
@@ -37,26 +32,26 @@ module fusion_plus::escrow_tests {
         );
         let fusion_signer = account::create_account_for_test(@fusion_plus);
 
-        let owner = common::initialize_account_with_fa(OWNER);
-        let recipient = common::initialize_account_with_fa(RECIPIENT);
-        let resolver = common::initialize_account_with_fa(RESOLVER);
+        let account_1 = common::initialize_account_with_fa(@0x201);
+        let account_2 = common::initialize_account_with_fa(@0x202);
+        let account_3 = common::initialize_account_with_fa(@0x203);
 
-        let (metadata, mint_ref) = common::create_test_token(&owner, b"Test Token");
+        let (metadata, mint_ref) = common::create_test_token(&fusion_signer, b"Test Token");
 
         // Mint assets to accounts
-        common::mint_fa(&mint_ref, MINT_AMOUNT, OWNER);
-        common::mint_fa(&mint_ref, MINT_AMOUNT, RECIPIENT);
-        common::mint_fa(&mint_ref, MINT_AMOUNT, RESOLVER);
+        common::mint_fa(&mint_ref, MINT_AMOUNT, signer::address_of(&account_1));
+        common::mint_fa(&mint_ref, MINT_AMOUNT, signer::address_of(&account_2));
+        common::mint_fa(&mint_ref, MINT_AMOUNT, signer::address_of(&account_3));
 
         // Initialize modules
         resolver_registry::init_module_for_test(&fusion_signer);
 
-        (owner, recipient, resolver, metadata, mint_ref)
+        (account_1, account_2, account_3, metadata, mint_ref)
     }
 
     #[test]
     fun test_create_escrow_from_order() {
-        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+        let (owner, _, resolver, metadata, _) = setup_test();
 
         // Create a fusion order first
         let fusion_order = fusion_order::new(
@@ -86,9 +81,9 @@ module fusion_plus::escrow_tests {
         // Verify escrow properties
         assert!(escrow::get_metadata(escrow) == metadata, 0);
         assert!(escrow::get_amount(escrow) == ASSET_AMOUNT, 0);
-        assert!(escrow::get_from(escrow) == OWNER, 0);
-        assert!(escrow::get_to(escrow) == RESOLVER, 0);
-        assert!(escrow::get_resolver(escrow) == RESOLVER, 0);
+        assert!(escrow::get_from(escrow) == signer::address_of(&owner), 0);
+        assert!(escrow::get_to(escrow) == signer::address_of(&resolver), 0);
+        assert!(escrow::get_resolver(escrow) == signer::address_of(&resolver), 0);
         assert!(escrow::get_chain_id(escrow) == CHAIN_ID, 0);
 
         // Verify assets are in escrow
@@ -107,22 +102,22 @@ module fusion_plus::escrow_tests {
 
     #[test]
     fun test_create_escrow_from_resolver() {
-        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+        let (_, recipient, resolver, metadata, _) = setup_test();
 
         // Record initial balances
         let initial_resolver_main_balance = primary_fungible_store::balance(
-            RESOLVER,
+            signer::address_of(&resolver),
             metadata
         );
         let initial_resolver_safety_deposit_balance = primary_fungible_store::balance(
-            RESOLVER,
+            signer::address_of(&resolver),
             constants::get_safety_deposit_metadata()
         );
 
         // Create escrow directly from resolver
         let escrow = escrow::new_from_resolver(
             &resolver,
-            RECIPIENT,
+            signer::address_of(&recipient),
             metadata,
             ASSET_AMOUNT,
             CHAIN_ID,
@@ -137,18 +132,18 @@ module fusion_plus::escrow_tests {
         // Verify escrow properties
         assert!(escrow::get_metadata(escrow) == metadata, 0);
         assert!(escrow::get_amount(escrow) == ASSET_AMOUNT, 0);
-        assert!(escrow::get_from(escrow) == RESOLVER, 0);
-        assert!(escrow::get_to(escrow) == RECIPIENT, 0);
-        assert!(escrow::get_resolver(escrow) == RESOLVER, 0);
+        assert!(escrow::get_from(escrow) == signer::address_of(&resolver), 0);
+        assert!(escrow::get_to(escrow) == signer::address_of(&recipient), 0);
+        assert!(escrow::get_resolver(escrow) == signer::address_of(&resolver), 0);
         assert!(escrow::get_chain_id(escrow) == CHAIN_ID, 0);
 
         // Verify resolver's balances decreased
         let final_resolver_main_balance = primary_fungible_store::balance(
-            RESOLVER,
+            signer::address_of(&resolver),
             metadata
         );
         let final_resolver_safety_deposit_balance = primary_fungible_store::balance(
-            RESOLVER,
+            signer::address_of(&resolver),
             constants::get_safety_deposit_metadata()
         );
 
@@ -171,7 +166,7 @@ module fusion_plus::escrow_tests {
 
     #[test]
     fun test_create_escrow_from_order_multiple_orders() {
-        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+        let (owner, _, resolver, metadata, _) = setup_test();
 
         // Create multiple fusion orders
         let fusion_order1 = fusion_order::new(
@@ -204,15 +199,15 @@ module fusion_plus::escrow_tests {
         // Verify escrow properties
         assert!(escrow::get_amount(escrow1) == ASSET_AMOUNT, 0);
         assert!(escrow::get_amount(escrow2) == ASSET_AMOUNT * 2, 0);
-        assert!(escrow::get_from(escrow1) == OWNER, 0);
-        assert!(escrow::get_from(escrow2) == OWNER, 0);
-        assert!(escrow::get_to(escrow1) == RESOLVER, 0);
-        assert!(escrow::get_to(escrow2) == RESOLVER, 0);
+        assert!(escrow::get_from(escrow1) == signer::address_of(&owner), 0);
+        assert!(escrow::get_from(escrow2) == signer::address_of(&owner), 0);
+        assert!(escrow::get_to(escrow1) == signer::address_of(&resolver), 0);
+        assert!(escrow::get_to(escrow2) == signer::address_of(&resolver), 0);
     }
 
     #[test]
     fun test_create_escrow_from_resolver_different_recipients() {
-        let (recipient1, recipient2, resolver, metadata, mint_ref) = setup_test();
+        let (recipient1, recipient2, resolver, metadata, _) = setup_test();
 
         // Create escrows with different recipients
         let escrow1 = escrow::new_from_resolver(
@@ -242,23 +237,23 @@ module fusion_plus::escrow_tests {
 
     #[test]
     fun test_create_escrow_large_amount() {
-        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+        let (_, recipient, resolver, metadata, mint_ref) = setup_test();
 
         let large_amount = 1000000000000; // 1M tokens
 
         // Mint large amount to resolver
-        common::mint_fa(&mint_ref, large_amount, RESOLVER);
+        common::mint_fa(&mint_ref, large_amount, signer::address_of(&resolver));
 
         // Record initial balance
         let initial_resolver_balance = primary_fungible_store::balance(
-            RESOLVER,
+            signer::address_of(&resolver),
             metadata
         );
 
         // Create escrow with large amount
         let escrow = escrow::new_from_resolver(
             &resolver,
-            RECIPIENT,
+            signer::address_of(&recipient),
             metadata,
             large_amount,
             CHAIN_ID,
@@ -267,12 +262,12 @@ module fusion_plus::escrow_tests {
 
         // Verify escrow properties
         assert!(escrow::get_amount(escrow) == large_amount, 0);
-        assert!(escrow::get_from(escrow) == RESOLVER, 0);
-        assert!(escrow::get_to(escrow) == RECIPIENT, 0);
+        assert!(escrow::get_from(escrow) == signer::address_of(&resolver), 0);
+        assert!(escrow::get_to(escrow) == signer::address_of(&recipient), 0);
 
         // Verify resolver's balance decreased
         let final_resolver_balance = primary_fungible_store::balance(
-            RESOLVER,
+            signer::address_of(&resolver),
             metadata
         );
         assert!(final_resolver_balance == initial_resolver_balance - large_amount, 0);
@@ -288,11 +283,11 @@ module fusion_plus::escrow_tests {
 
     #[test]
     fun test_escrow_timelock_and_hashlock() {
-        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+        let (_, recipient, resolver, metadata, _) = setup_test();
 
         let escrow = escrow::new_from_resolver(
             &resolver,
-            RECIPIENT,
+            signer::address_of(&recipient),
             metadata,
             ASSET_AMOUNT,
             CHAIN_ID,
@@ -311,11 +306,11 @@ module fusion_plus::escrow_tests {
 
     #[test]
     fun test_escrow_phase_transitions() {
-        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+        let (_, recipient, resolver, metadata, _) = setup_test();
 
         let escrow = escrow::new_from_resolver(
             &resolver,
-            RECIPIENT,
+            signer::address_of(&recipient),
             metadata,
             ASSET_AMOUNT,
             CHAIN_ID,
@@ -324,7 +319,7 @@ module fusion_plus::escrow_tests {
 
         let timelock = escrow::get_timelock(escrow);
 
-        let (finality_duration, exclusive_duration, private_cancellation_duration) = timelock::get_durations(&timelock);
+        let (finality_duration, _, _) = timelock::get_durations(&timelock);
 
         // Initially in finality phase
         assert!(timelock::is_in_finality_phase(&timelock) == true, 0);
@@ -343,17 +338,17 @@ module fusion_plus::escrow_tests {
 
     #[test]
     fun test_escrow_safety_deposit_handling() {
-        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+        let (_, recipient, resolver, metadata, _) = setup_test();
 
         // Record initial safety deposit balance
         let initial_resolver_safety_deposit_balance = primary_fungible_store::balance(
-            RESOLVER,
+            signer::address_of(&resolver),
             constants::get_safety_deposit_metadata()
         );
 
         let escrow = escrow::new_from_resolver(
             &resolver,
-            RECIPIENT,
+            signer::address_of(&recipient),
             metadata,
             ASSET_AMOUNT,
             CHAIN_ID,
@@ -364,7 +359,7 @@ module fusion_plus::escrow_tests {
 
         // Verify resolver's safety deposit balance decreased
         let final_resolver_safety_deposit_balance = primary_fungible_store::balance(
-            RESOLVER,
+            signer::address_of(&resolver),
             constants::get_safety_deposit_metadata()
         );
         assert!(final_resolver_safety_deposit_balance == initial_resolver_safety_deposit_balance - constants::get_safety_deposit_amount(), 0);
@@ -379,7 +374,7 @@ module fusion_plus::escrow_tests {
 
     #[test]
     fun test_escrow_object_lifecycle() {
-        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+        let (owner, _, resolver, metadata, _) = setup_test();
 
         // Create fusion order
         let fusion_order = fusion_order::new(
@@ -410,7 +405,7 @@ module fusion_plus::escrow_tests {
 
     #[test]
     fun test_escrow_from_order_vs_from_resolver_comparison() {
-        let (owner, recipient, resolver, metadata, mint_ref) = setup_test();
+        let (owner, recipient, resolver, metadata, _) = setup_test();
 
         // Create escrow from order
         let fusion_order = fusion_order::new(
@@ -426,7 +421,7 @@ module fusion_plus::escrow_tests {
         // Create escrow from resolver
         let escrow_from_resolver = escrow::new_from_resolver(
             &resolver,
-            RECIPIENT,
+            signer::address_of(&recipient),
             metadata,
             ASSET_AMOUNT,
             CHAIN_ID,
@@ -439,10 +434,10 @@ module fusion_plus::escrow_tests {
         assert!(escrow::get_resolver(escrow_from_order) == escrow::get_resolver(escrow_from_resolver), 0);
 
         // Key differences
-        assert!(escrow::get_from(escrow_from_order) == OWNER, 0); // From original owner
-        assert!(escrow::get_from(escrow_from_resolver) == RESOLVER, 0); // From resolver
+        assert!(escrow::get_from(escrow_from_order) == signer::address_of(&owner), 0); // From original owner
+        assert!(escrow::get_from(escrow_from_resolver) == signer::address_of(&resolver), 0); // From resolver
 
-        assert!(escrow::get_to(escrow_from_order) == RESOLVER, 0); // To resolver
-        assert!(escrow::get_to(escrow_from_resolver) == RECIPIENT, 0); // To recipient
+        assert!(escrow::get_to(escrow_from_order) == signer::address_of(&resolver), 0); // To resolver
+        assert!(escrow::get_to(escrow_from_resolver) == signer::address_of(&recipient), 0); // To recipient
     }
 }

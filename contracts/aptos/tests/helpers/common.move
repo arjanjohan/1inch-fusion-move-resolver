@@ -3,7 +3,7 @@ module fusion_plus::common {
     use std::option::{Self};
     use std::string::utf8;
     use aptos_framework::account;
-    use aptos_framework::aptos_coin::{Self, AptosCoin};
+    use aptos_framework::aptos_coin::{Self};
     use aptos_framework::fungible_asset::{Self, Metadata, MintRef};
     use aptos_framework::object::{Self, Object};
     use aptos_framework::primary_fungible_store;

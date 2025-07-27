@@ -1,16 +1,8 @@
 module fusion_plus::constants {
 
-    use std::option::{Self, Option};
-    use std::signer;
-    use std::debug;
-    use aptos_framework::event::{Self};
-    use aptos_framework::fungible_asset::{Self, FungibleAsset, Metadata};
-    use aptos_framework::object::{Self, Object, ExtendRef, DeleteRef, ObjectGroup};
-    use aptos_framework::primary_fungible_store;
+    use aptos_framework::fungible_asset::{Metadata};
+    use aptos_framework::object::{Self, Object};
 
-    use fusion_plus::hashlock::{Self, HashLock};
-    use fusion_plus::timelock::{Self, Timelock};
-    use fusion_plus::resolver_registry;
 
     // - - - - CONSTANTS - - - -
 
