@@ -5,6 +5,7 @@ import { Aptos, Network, AptosConfig, Account, Ed25519PrivateKey } from '@aptos-
 import { ACCOUNTS, createAccount, NETWORK_CONFIG } from './setup'
 import { FungibleAssetsHelper } from './helpers/fungible-assets'
 import { FusionHelper } from './helpers/fusion'
+import { DeploymentHelper } from './helpers/deployment'
 
 jest.setTimeout(1000 * 60)
 
@@ -25,6 +26,10 @@ describe('Aptos Cross-Chain Swap', () => {
             // faucet: NETWORK_CONFIG.faucetUrl,
         });
         client = new Aptos(aptosConfig)
+
+        // Check and deploy contracts if needed
+        const deploymentHelper = new DeploymentHelper()
+        await deploymentHelper.ensureContractsDeployed()
 
         // Initialize helpers
         fungibleHelper = new FungibleAssetsHelper()
@@ -108,7 +113,7 @@ describe('Aptos Cross-Chain Swap', () => {
             makerAsset,
             makerAmount,
             chain_id,
-            keccak256(secret)
+            new Uint8Array(Buffer.from(keccak256(secret).slice(2), 'hex'))
         );
 
         console.log(`✅ Fusion order created! Transaction: ${orderResult.txHash}`)
