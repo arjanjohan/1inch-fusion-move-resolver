@@ -16,7 +16,7 @@ export class FusionHelper {
         asset: string,
         amount: bigint,
         chain_id: bigint,
-        hash: string
+        hash: Uint8Array
     ): Promise<{ txHash: string; orderAddress: string }> {
         try {
             console.log('🔧 AVH hash =', hash)
@@ -173,14 +173,11 @@ export class FusionHelper {
         asset: string,
         amount: bigint,
         chain_id: bigint,
-        hash: string
+        hash: Uint8Array
     ): Promise<{ txHash: string; escrowAddress: string }> {
         try {
             console.log('🔧 Creating escrow from resolver:', resolver.accountAddress.toString());
-            console.log('AVH METADATA =', asset)
-            console.log('AVH AMOUNT =', amount)
-            console.log('AVH CHAIN_ID =', chain_id)
-            console.log('AVH HASH =', hash)
+
 
             const transaction = await this.client.transaction.build.simple({
                 sender: resolver.accountAddress,
@@ -216,20 +213,76 @@ export class FusionHelper {
         }
     }
 
+    // Get order details
+    async createHashFromSecret(
+        secret: Uint8Array
+    ): Promise<any> {
+        try {
+            // Convert to bytes if it's a string
+            const secretBytes = typeof secret === 'string'
+                ? new Uint8Array(Buffer.from(secret, 'hex'))
+                : secret;
+
+            const response = await this.client.view({
+                payload: {
+                    function: `${this.fusionAddress}::hashlock::create_hash_for_test`,
+                    typeArguments: [],
+                    functionArguments: [Array.from(secretBytes)]
+                }
+            });
+            console.log('AVH HASH_RAW =', response)
+            return response[0];
+        } catch (error) {
+            console.log(`Error getting order: ${error}`);
+            return null;
+        }
+    }
+
+    // Get order details
+    async verifySecret(
+        escrowAddress: string,
+        secret: string | Uint8Array
+    ): Promise<any> {
+        try {
+            // Convert to bytes if it's a string
+            const secretBytes = typeof secret === 'string'
+                ? new Uint8Array(Buffer.from(secret.startsWith('0x') ? secret.slice(2) : secret, 'hex'))
+                : secret;
+
+            const response = await this.client.view({
+                payload: {
+                    function: `${this.fusionAddress}::escrow::verify_secret`,
+                    typeArguments: [],
+                    functionArguments: [escrowAddress, Array.from(secretBytes)]
+                }
+            });
+            console.log('🔍 Secret verification result:', response);
+            return response[0];
+        } catch (error) {
+            console.log(`Error getting order: ${error}`);
+            return null;
+        }
+    }
+
     // Withdraw from escrow using secret
     async withdrawFromEscrow(
         resolver: Account,
         escrowAddress: string,
-        secret: string
+        secret: string | Uint8Array
     ): Promise<string> {
         try {
             console.log('🔧 Withdrawing from escrow:', escrowAddress);
+            // Convert to bytes if it's a string
+            const secretBytes = typeof secret === 'string'
+                ? new Uint8Array(Buffer.from(secret.startsWith('0x') ? secret.slice(2) : secret, 'hex'))
+                : secret;
+
             const transaction = await this.client.transaction.build.simple({
                 sender: resolver.accountAddress,
                 data: {
                     function: `${this.fusionAddress}::escrow::withdraw`,
                     typeArguments: [],
-                    functionArguments: [escrowAddress, secret]
+                    functionArguments: [escrowAddress, Array.from(secretBytes)]
                 },
             });
 
@@ -306,26 +359,21 @@ export class FusionHelper {
     private extractEscrowAddressFromEvents(txResult: any): string {
         try {
             const events = txResult.events || [];
-            console.log('🔧 Escrow events:', events);
 
             for (const event of events) {
                 // Look for EscrowCreatedEvent
                 if (event.type && event.type.includes('escrow::EscrowCreatedEvent')) {
-                    console.log('📝 Found EscrowCreatedEvent:', event);
 
                     // The escrow address should be in the event data
                     if (event.data && event.data.escrow) {
-                        console.log('📦 Escrow object:', event.data.escrow);
 
                         // If escrow is an object, it might have an inner property
                         if (typeof event.data.escrow === 'object' && event.data.escrow.inner) {
-                            console.log(`📦 Found escrow address in escrow.inner: ${event.data.escrow.inner}`);
                             return event.data.escrow.inner;
                         }
 
                         // If escrow is a string, return it directly
                         if (typeof event.data.escrow === 'string') {
-                            console.log(`📦 Found escrow address in escrow: ${event.data.escrow}`);
                             return event.data.escrow;
                         }
 
@@ -333,7 +381,6 @@ export class FusionHelper {
                         if (typeof event.data.escrow === 'object') {
                             for (const [key, value] of Object.entries(event.data.escrow)) {
                                 if (typeof value === 'string' && value.startsWith('0x') && value.length === 66) {
-                                    console.log(`📦 Found escrow address in escrow.${key}: ${value}`);
                                     return value;
                                 }
                             }
