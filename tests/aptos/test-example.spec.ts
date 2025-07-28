@@ -4,14 +4,20 @@ import { expect, jest } from '@jest/globals'
 import { Aptos, Network, AptosConfig, Account, Ed25519PrivateKey } from '@aptos-labs/ts-sdk'
 import { ACCOUNTS, createAccount, NETWORK_CONFIG } from './setup'
 import { FungibleAssetsHelper } from './helpers/fungible-assets'
-import { FusionHelper } from './helpers/fusion'
+import { EscrowHelper } from './helpers/escrow'
+import { HashlockHelper } from './helpers/hashlock'
+import { FusionOrderHelper } from './helpers/fusion-order'
+import { ResolverRegistryHelper } from './helpers/resolver-registry'
 import { DeploymentHelper } from './helpers/deployment'
 
 jest.setTimeout(1000 * 60)
 
 describe('Aptos Cross-Chain Swap', () => {
     let fungibleHelper: FungibleAssetsHelper
-    let fusionHelper: FusionHelper
+    let escrowHelper: EscrowHelper
+    let hashlockHelper: HashlockHelper
+    let fusionOrderHelper: FusionOrderHelper
+    let resolverRegistryHelper: ResolverRegistryHelper
     let userAccount: Account
     let resolverAccount: Account
     let client: Aptos
@@ -33,7 +39,10 @@ describe('Aptos Cross-Chain Swap', () => {
 
         // Initialize helpers
         fungibleHelper = new FungibleAssetsHelper()
-        fusionHelper = new FusionHelper()
+        escrowHelper = new EscrowHelper()
+        hashlockHelper = new HashlockHelper()
+        fusionOrderHelper = new FusionOrderHelper()
+        resolverRegistryHelper = new ResolverRegistryHelper()
         usdtMetadata = await fungibleHelper.getUsdtMetadata()
 
         // Create accounts (you'll need to provide private keys)
@@ -108,7 +117,7 @@ describe('Aptos Cross-Chain Swap', () => {
         const chain_id = BigInt(1)
         const secret = '0x1234567890'
 
-        const orderResult = await fusionHelper.createOrder(
+        const orderResult = await fusionOrderHelper.createOrder(
             userAccount,
             makerAsset,
             makerAmount,
@@ -135,7 +144,7 @@ describe('Aptos Cross-Chain Swap', () => {
         // );
 
         // Check if resolver is active
-        const isActive = await fusionHelper.isResolverActive(ACCOUNTS.RESOLVER.address)
+        const isActive = await resolverRegistryHelper.isResolverActive(ACCOUNTS.RESOLVER.address)
         console.log(`🔧 Resolver active status: ${isActive}`)
         expect(isActive).toBe(true)
 
@@ -146,10 +155,10 @@ describe('Aptos Cross-Chain Swap', () => {
         const chain_id = BigInt(1)
         const secret = '0x1234567890'
         const secretBytes = new Uint8Array(Buffer.from(secret.startsWith('0x') ? secret.slice(2) : secret, 'hex'))
-        const secretHash = await fusionHelper.createHashFromSecret(secretBytes)
+        const secretHash = await hashlockHelper.createHashFromSecret(secretBytes)
         const secretHashBytes = new Uint8Array(Buffer.from(secretHash.startsWith('0x') ? secretHash.slice(2) : secretHash, 'hex'))
 
-        const orderResult = await fusionHelper.createOrder(
+        const orderResult = await fusionOrderHelper.createOrder(
             userAccount,
             makerAsset,
             makerAmount,
@@ -164,7 +173,7 @@ describe('Aptos Cross-Chain Swap', () => {
 
         // Create escrow from the fusion order
         console.log('🔒 Creating escrow from fusion order...')
-        const escrowResult = await fusionHelper.createEscrowFromOrder(
+        const escrowResult = await escrowHelper.createEscrowFromOrder(
             resolverAccount,
             orderResult.orderAddress
         );
@@ -178,7 +187,7 @@ describe('Aptos Cross-Chain Swap', () => {
 
         // Withdraw from escrow using the secret
         console.log('💰 Withdrawing from escrow...')
-        const withdrawTxHash = await fusionHelper.withdrawFromEscrow(
+        const withdrawTxHash = await escrowHelper.withdrawFromEscrow(
             resolverAccount,
             escrowResult.escrowAddress,
             secret
@@ -194,19 +203,19 @@ describe('Aptos Cross-Chain Swap', () => {
     it('should create escrow from resolver', async () => {
 
         // Check if resolver is active
-        let isActive = await fusionHelper.isResolverActive(ACCOUNTS.RESOLVER.address)
+        let isActive = await resolverRegistryHelper.isResolverActive(ACCOUNTS.RESOLVER.address)
 
         if (!isActive) {
             // First, register the resolver using the FUSION account
             console.log('🔧 Registering resolver in registry...')
             const fusionAccount = createAccount(ACCOUNTS.FUSION.privateKey)
-            await fusionHelper.registerResolver(
+            await resolverRegistryHelper.registerResolver(
                 fusionAccount,
                 ACCOUNTS.RESOLVER.address
             );
         }
 
-        isActive = await fusionHelper.isResolverActive(ACCOUNTS.RESOLVER.address)
+        isActive = await resolverRegistryHelper.isResolverActive(ACCOUNTS.RESOLVER.address)
         console.log(`🔧 Resolver active status: ${isActive}`)
         expect(isActive).toBe(true)
 
@@ -217,10 +226,10 @@ describe('Aptos Cross-Chain Swap', () => {
         const chain_id = BigInt(1)
         const secret = '0x1234567890'
         const secretBytes = new Uint8Array(Buffer.from(secret.startsWith('0x') ? secret.slice(2) : secret, 'hex'))
-        const secretHash = await fusionHelper.createHashFromSecret(secretBytes)
+        const secretHash = await hashlockHelper.createHashFromSecret(secretBytes)
         const secretHashBytes = new Uint8Array(Buffer.from(secretHash.startsWith('0x') ? secretHash.slice(2) : secretHash, 'hex'))
 
-        const escrowResult = await fusionHelper.createEscrowFromResolver(
+        const escrowResult = await escrowHelper.createEscrowFromResolver(
             resolverAccount,
             userAccount.accountAddress.toString(),
             makerAsset,
@@ -239,7 +248,7 @@ describe('Aptos Cross-Chain Swap', () => {
 
         // Verify the secret before withdrawing
         console.log('🔍 Verifying secret before withdrawal...')
-        const isSecretValid = await fusionHelper.verifySecret(
+        const isSecretValid = await escrowHelper.verifySecret(
             escrowResult.escrowAddress,
             secretBytes
         );
@@ -252,7 +261,7 @@ describe('Aptos Cross-Chain Swap', () => {
 
         // Withdraw from escrow using the secret
         console.log('💰 Withdrawing from escrow...')
-        const withdrawTxHash = await fusionHelper.withdrawFromEscrow(
+        const withdrawTxHash = await escrowHelper.withdrawFromEscrow(
             resolverAccount,
             escrowResult.escrowAddress,
             secretBytes
