@@ -20,7 +20,7 @@ export class EscrowHelper {
             const transaction = await this.client.transaction.build.simple({
                 sender: resolver.accountAddress,
                 data: {
-                    function: `${this.fusionAddress}::escrow::new_from_order_entry`,
+                    function: `${this.fusionAddress}::escrow::deploy_source_entry`,
                     typeArguments: [],
                     functionArguments: [fusionOrder]
                 },
@@ -54,11 +54,15 @@ export class EscrowHelper {
     // Create escrow from resolver
     async createEscrowFromResolver(
         resolver: Account,
-        recipient_address: string,
-        asset: string,
+        order_hash: Uint8Array,
+        hash: Uint8Array,
+        taker: string,
+        metadata: string,
         amount: bigint,
-        chain_id: bigint,
-        hash: Uint8Array
+        safety_deposit_amount: bigint,
+        finality_duration: bigint,
+        exclusive_duration: bigint,
+        private_cancellation_duration: bigint
     ): Promise<{ txHash: string; escrowAddress: string }> {
         try {
             console.log('🔧 Creating escrow from resolver:', resolver.accountAddress.toString());
@@ -66,9 +70,19 @@ export class EscrowHelper {
             const transaction = await this.client.transaction.build.simple({
                 sender: resolver.accountAddress,
                 data: {
-                    function: `${this.fusionAddress}::escrow::new_from_resolver_entry`,
+                    function: `${this.fusionAddress}::escrow::deploy_destination_entry`,
                     typeArguments: [],
-                    functionArguments: [recipient_address, asset, amount, chain_id, hash]
+                    functionArguments: [
+                        order_hash,
+                        hash,
+                        taker,
+                        metadata,
+                        amount,
+                        safety_deposit_amount,
+                        finality_duration,
+                        exclusive_duration,
+                        private_cancellation_duration
+                    ]
                 },
             });
 

@@ -48,6 +48,24 @@ describe('Aptos Cross-Chain Swap', () => {
         // Create accounts (you'll need to provide private keys)
         userAccount = createAccount(ACCOUNTS.USER.privateKey)
         resolverAccount = createAccount(ACCOUNTS.RESOLVER.privateKey)
+
+        console.log('🔧 Fauceting APT to accounts...')
+        await client.faucet.fundAccount({
+            accountAddress: userAccount.accountAddress.toString(),
+            amount: 100_000_000 // 1 APT
+        });
+        await client.faucet.fundAccount({
+            accountAddress: resolverAccount.accountAddress.toString(),
+            amount: 100_000_000 // 1 APT
+        });
+
+        console.log('🔧 Migrating APT to FungibleStore for accounts...')
+            await fungibleHelper.migrateAptosCoinToFungibleStore(
+                userAccount
+            )
+            await fungibleHelper.migrateAptosCoinToFungibleStore(
+                resolverAccount
+            )
     })
 
     it('should faucet tokens to user and check USDT balances', async () => {
@@ -56,7 +74,7 @@ describe('Aptos Cross-Chain Swap', () => {
         console.log('🔧 Fauceting APT to user at address', userAccount.accountAddress.toString())
         await client.faucet.fundAccount({
             accountAddress: userAccount.accountAddress.toString(),
-            amount: 100_000_000 // 100 APT
+            amount: 100_000_000 // 1 APT
         });
 
         // Check APT balance using primary_fungible_store
@@ -65,6 +83,12 @@ describe('Aptos Cross-Chain Swap', () => {
             '0xa' // APT metadata address
         )
         console.log(`User APT balance: ${aptBalance}`)
+        // if (aptBalance === BigInt(0)) {
+        //     console.log('🔧 Migrating APT to FungibleStore...')
+        //     await fungibleHelper.migrateAptosCoinToFungibleStore(
+        //         userAccount
+        //     )
+        // }
         expect(aptBalance).toBeGreaterThan(BigInt(0))
 
         // Faucet USDT to the user using the USDT metadata address
@@ -80,7 +104,7 @@ describe('Aptos Cross-Chain Swap', () => {
 
         // Check USDT balance using the USDT metadata address
         const usdtBalance = await fungibleHelper.getBalance(
-            ACCOUNTS.USER.address,
+            userAccount.accountAddress.toString(),
             usdtMetadata
         )
 
@@ -92,8 +116,8 @@ describe('Aptos Cross-Chain Swap', () => {
         // Faucet APT to user account
         console.log('🔧 Fauceting APT to user account...')
         await client.faucet.fundAccount({
-            accountAddress: ACCOUNTS.USER.address,
-            amount: 100_000_000 // 100 APT
+            accountAddress: userAccount.accountAddress.toString(),
+            amount: 100_000_000 // 1 APT (8 decimals)
         });
 
 
@@ -116,13 +140,23 @@ describe('Aptos Cross-Chain Swap', () => {
 
         const chain_id = BigInt(1)
         const secret = '0x1234567890'
+        const order_hash = new Uint8Array(Buffer.from('order_hash_123', 'utf8'))
+        const hash = new Uint8Array(Buffer.from(keccak256(secret).slice(2), 'hex'))
+        const safety_deposit_amount = BigInt(10_000) // 0.0001 APT (8 decimals)
+        const finality_duration = BigInt(5) // 5 seconds
+        const exclusive_duration = BigInt(5) // 5 seconds
+        const private_cancellation_duration = BigInt(5) // 5 seconds
 
         const orderResult = await fusionOrderHelper.createOrder(
             userAccount,
+            order_hash,
+            hash,
             makerAsset,
             makerAmount,
-            chain_id,
-            new Uint8Array(Buffer.from(keccak256(secret).slice(2), 'hex'))
+            safety_deposit_amount,
+            finality_duration,
+            exclusive_duration,
+            private_cancellation_duration
         );
 
         console.log(`✅ Fusion order created! Transaction: ${orderResult.txHash}`)
@@ -135,73 +169,6 @@ describe('Aptos Cross-Chain Swap', () => {
     })
 
     it('should create escrow from order and withdraw', async () => {
-        // // First, register the resolver using the FUSION account
-        // console.log('🔧 Registering resolver in registry...')
-        // const fusionAccount = createAccount(ACCOUNTS.FUSION.privateKey)
-        // await fusionHelper.registerResolver(
-        //     fusionAccount,
-        //     ACCOUNTS.RESOLVER.address
-        // );
-
-        // Check if resolver is active
-        const isActive = await resolverRegistryHelper.isResolverActive(ACCOUNTS.RESOLVER.address)
-        console.log(`🔧 Resolver active status: ${isActive}`)
-        expect(isActive).toBe(true)
-
-        // Create a fusion order first
-        console.log('📝 Creating fusion order for escrow test...')
-        const makerAsset = usdtMetadata // USDT metadata address
-        const makerAmount = BigInt(1_000_000) // 1 USDT
-        const chain_id = BigInt(1)
-        const secret = '0x1234567890'
-        const secretBytes = new Uint8Array(Buffer.from(secret.startsWith('0x') ? secret.slice(2) : secret, 'hex'))
-        const secretHash = await hashlockHelper.createHashFromSecret(secretBytes)
-        const secretHashBytes = new Uint8Array(Buffer.from(secretHash.startsWith('0x') ? secretHash.slice(2) : secretHash, 'hex'))
-
-        const orderResult = await fusionOrderHelper.createOrder(
-            userAccount,
-            makerAsset,
-            makerAmount,
-            chain_id,
-            secretHashBytes
-        );
-
-        console.log(`✅ Fusion order created! Order address: ${orderResult.orderAddress}`)
-        expect(orderResult.orderAddress).toBeDefined()
-        expect(orderResult.orderAddress).not.toBe('')
-
-
-        // Create escrow from the fusion order
-        console.log('🔒 Creating escrow from fusion order...')
-        const escrowResult = await escrowHelper.createEscrowFromOrder(
-            resolverAccount,
-            orderResult.orderAddress
-        );
-
-        console.log(`✅ Escrow created! Escrow address: ${escrowResult.escrowAddress}`)
-        expect(escrowResult.escrowAddress).toBeDefined()
-        expect(escrowResult.escrowAddress).not.toBe('')
-
-        // Wait for the escrow to be processed
-        await new Promise(resolve => setTimeout(resolve, 15000));
-
-        // Withdraw from escrow using the secret
-        console.log('💰 Withdrawing from escrow...')
-        const withdrawTxHash = await escrowHelper.withdrawFromEscrow(
-            resolverAccount,
-            escrowResult.escrowAddress,
-            secret
-        );
-
-        console.log(`✅ Withdrawal successful! Transaction: ${withdrawTxHash}`)
-        expect(withdrawTxHash).toBeDefined()
-
-        console.log('🎉 Complete escrow flow test completed!')
-    })
-
-
-    it('should create escrow from resolver', async () => {
-
         // Check if resolver is active
         let isActive = await resolverRegistryHelper.isResolverActive(ACCOUNTS.RESOLVER.address)
 
@@ -228,23 +195,109 @@ describe('Aptos Cross-Chain Swap', () => {
         const secretBytes = new Uint8Array(Buffer.from(secret.startsWith('0x') ? secret.slice(2) : secret, 'hex'))
         const secretHash = await hashlockHelper.createHashFromSecret(secretBytes)
         const secretHashBytes = new Uint8Array(Buffer.from(secretHash.startsWith('0x') ? secretHash.slice(2) : secretHash, 'hex'))
+        const order_hash = new Uint8Array(Buffer.from('order_hash_123', 'utf8'))
+        const safety_deposit_amount = BigInt(10_000) // 0.0001 APT (8 decimals)
+        const finality_duration = BigInt(5) // 5 seconds
+        const exclusive_duration = BigInt(5) // 5 seconds
+        const private_cancellation_duration = BigInt(5) // 5 seconds
 
-        const escrowResult = await escrowHelper.createEscrowFromResolver(
-            resolverAccount,
-            userAccount.accountAddress.toString(),
+        const orderResult = await fusionOrderHelper.createOrder(
+            userAccount,
+            order_hash,
+            secretHashBytes,
             makerAsset,
             makerAmount,
-            chain_id,
-            secretHashBytes
+            safety_deposit_amount,
+            finality_duration,
+            exclusive_duration,
+            private_cancellation_duration
         );
 
+        console.log(`✅ Fusion order created! Order address: ${orderResult.orderAddress}`)
+        expect(orderResult.orderAddress).toBeDefined()
+        expect(orderResult.orderAddress).not.toBe('')
+
+
+        // Create escrow from the fusion order
+        console.log('🔒 Creating escrow from fusion order...')
+        const escrowResult = await escrowHelper.createEscrowFromOrder(
+            resolverAccount,
+            orderResult.orderAddress
+        );
 
         console.log(`✅ Escrow created! Escrow address: ${escrowResult.escrowAddress}`)
         expect(escrowResult.escrowAddress).toBeDefined()
         expect(escrowResult.escrowAddress).not.toBe('')
 
         // Wait for the escrow to be processed
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 6000));
+
+        // Withdraw from escrow using the secret
+        console.log('💰 Withdrawing from escrow...')
+        const withdrawTxHash = await escrowHelper.withdrawFromEscrow(
+            resolverAccount,
+            escrowResult.escrowAddress,
+            secret
+        );
+
+        console.log(`✅ Withdrawal successful! Transaction: ${withdrawTxHash}`)
+        expect(withdrawTxHash).toBeDefined()
+
+        console.log('🎉 Complete escrow flow test completed!')
+    })
+
+
+    it('should create escrow from resolver', async () => {
+        // Check if resolver is active
+        let isActive = await resolverRegistryHelper.isResolverActive(ACCOUNTS.RESOLVER.address)
+
+        if (!isActive) {
+            // First, register the resolver using the FUSION account
+            console.log('🔧 Registering resolver in registry...')
+            const fusionAccount = createAccount(ACCOUNTS.FUSION.privateKey)
+            await resolverRegistryHelper.registerResolver(
+                fusionAccount,
+                ACCOUNTS.RESOLVER.address
+            );
+        }
+
+        isActive = await resolverRegistryHelper.isResolverActive(ACCOUNTS.RESOLVER.address)
+        console.log(`🔧 Resolver active status: ${isActive}`)
+        expect(isActive).toBe(true)
+
+        // Create a fusion order first
+        console.log('📝 Creating fusion order for escrow test...')
+        const makerAsset = usdtMetadata // USDT metadata address
+        const makerAmount = BigInt(1_000_000) // 1 USDT
+        const chain_id = BigInt(1)
+        const secret = '0x1234567890'
+        const secretBytes = new Uint8Array(Buffer.from(secret.startsWith('0x') ? secret.slice(2) : secret, 'hex'))
+        const secretHash = await hashlockHelper.createHashFromSecret(secretBytes)
+        const secretHashBytes = new Uint8Array(Buffer.from(secretHash.startsWith('0x') ? secretHash.slice(2) : secretHash, 'hex'))
+        const order_hash = new Uint8Array(Buffer.from('order_hash_123', 'utf8'))
+        const taker = userAccount.accountAddress.toString()
+        const safety_deposit_amount = BigInt(10_000) // 0.0001 APT
+        const finality_duration = BigInt(5) // 5 seconds
+        const exclusive_duration = BigInt(5) // 5 seconds
+        const private_cancellation_duration = BigInt(5) // 5 seconds
+
+        const escrowResult = await escrowHelper.createEscrowFromResolver(
+            resolverAccount,
+            order_hash,
+            secretHashBytes,
+            taker,
+            makerAsset,
+            makerAmount,
+            safety_deposit_amount,
+            finality_duration,
+            exclusive_duration,
+            private_cancellation_duration
+        );
+
+
+        console.log(`✅ Escrow created! Escrow address: ${escrowResult.escrowAddress}`)
+        expect(escrowResult.escrowAddress).toBeDefined()
+        expect(escrowResult.escrowAddress).not.toBe('')
 
         // Verify the secret before withdrawing
         console.log('🔍 Verifying secret before withdrawal...')
@@ -257,7 +310,7 @@ describe('Aptos Cross-Chain Swap', () => {
         expect(isSecretValid).toBe(true)
 
         // wait for 10 seconds before withdrawing
-        await new Promise(resolve => setTimeout(resolve, 10000));
+        await new Promise(resolve => setTimeout(resolve, 6000));
 
         // Withdraw from escrow using the secret
         console.log('💰 Withdrawing from escrow...')

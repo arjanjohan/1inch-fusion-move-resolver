@@ -13,23 +13,32 @@ export class FusionOrderHelper {
     // Create a fusion order and return both tx hash and order address
     async createOrder(
         user: Account,
-        asset: string,
+        order_hash: Uint8Array,
+        hash: Uint8Array,
+        metadata: string,
         amount: bigint,
-        chain_id: bigint,
-        hash: Uint8Array
+        safety_deposit_amount: bigint,
+        finality_duration: bigint,
+        exclusive_duration: bigint,
+        private_cancellation_duration: bigint
     ): Promise<{ txHash: string; orderAddress: string }> {
         try {
-            console.log('🔧 AVH hash =', hash)
+            console.log('🔧 Creating fusion order with order_hash:', order_hash);
+            console.log('🔧 Creating fusion order with hash:', hash);
             const transaction = await this.client.transaction.build.simple({
                 sender: user.accountAddress,
                 data: {
                     function: `${this.fusionAddress}::fusion_order::new_entry`,
                     typeArguments: [],
                     functionArguments: [
-                        asset,
+                        order_hash,
+                        hash,
+                        metadata,
                         amount,
-                        chain_id,
-                        hash
+                        safety_deposit_amount,
+                        finality_duration,
+                        exclusive_duration,
+                        private_cancellation_duration
                     ]
                 },
             });

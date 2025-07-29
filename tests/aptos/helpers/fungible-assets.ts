@@ -140,4 +140,33 @@ export class FungibleAssetsHelper {
         await this.client.waitForTransaction({ transactionHash: submitResponse.hash });
         return submitResponse.hash;
     }
+
+
+    // Migrate Coin to FungibleStore
+    async migrateAptosCoinToFungibleStore(
+        admin: Account,
+    ) {
+
+        const transaction = await this.client.transaction.build.simple({
+            sender: admin.accountAddress,
+            data: {
+                function: `0x1::coin::migrate_to_fungible_store`,
+                typeArguments: ['0x1::aptos_coin::AptosCoin'],
+                functionArguments: []
+            },
+        });
+
+        const adminSignature = await this.client.transaction.sign({
+            signer: admin,
+            transaction,
+        });
+
+        const submitResponse = await this.client.transaction.submit.simple({
+            transaction,
+            senderAuthenticator: adminSignature,
+        });
+
+        await this.client.waitForTransaction({ transactionHash: submitResponse.hash });
+        return submitResponse.hash;
+    }
 }
