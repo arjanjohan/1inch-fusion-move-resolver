@@ -479,6 +479,7 @@ describe('Resolving example', () => {
 
             const fillAmount = order.makingAmount / 2n
             const idx = Number((BigInt(secrets.length - 1) * (fillAmount - 1n)) / order.makingAmount)
+            console.log(`[${srcChainId}]`, ` AVH Filling order ${orderHash} with fill amount ${fillAmount} and idx ${idx}`)
 
             const {txHash: orderFillHash, blockHash: srcDeployBlock} = await srcChainResolver.send(
                 resolverContract.deploySrc(

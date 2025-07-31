@@ -1,0 +1,14 @@
+{
+  "network": "",
+  "deployedAt": "2025-07-27T15:20:52Z",
+  "packageAddress": "0x1",
+  "modules": [
+    "fusion_order",
+    "escrow",
+    "resolver_registry",
+    "timelock",
+    "hashlock",
+    "constants"
+  ],
+  "deployer": "0x1"
+}
