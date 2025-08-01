@@ -1,5 +1,6 @@
 import 'dotenv/config'
 import {expect, jest} from '@jest/globals'
+import { Aptos, Account } from '@aptos-labs/ts-sdk'
 
 import {createServer, CreateServerReturnType} from 'prool'
 import {anvil} from 'prool/instances'
@@ -25,7 +26,7 @@ import factoryContract from '../dist/contracts/TestEscrowFactory.sol/TestEscrowF
 import resolverContract from '../dist/contracts/Resolver.sol/Resolver.json'
 
 // Aptos imports
-import { Aptos, Network, AptosConfig, Account, Ed25519PrivateKey } from '@aptos-labs/ts-sdk'
+import { ACCOUNTS as APTOS_ACCOUNTS, createAptosClient, createAccount } from './aptos/setup'
 import { FungibleAssetsHelper } from './aptos/helpers/fungible-assets'
 import { EscrowHelper } from './aptos/helpers/escrow'
 import { HashlockHelper } from './aptos/helpers/hashlock'
@@ -41,48 +42,7 @@ jest.setTimeout(1000 * 60)
 const userPk = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d'
 const resolverPk = '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a'
 
-// Aptos account configuration
-const APTOS_ACCOUNTS = {
-    FUSION: {
-        address: '0x5f28002a709921a3bad09df582cdd99a7cab3ec300e99c88fbf50a354e62973b',
-        privateKey: 'ed25519-priv-0xb2ff597cbff60622a6984341f91a732399eb2e08cc9e9a29b4621c36eb537cd8',
-        name: 'Fusion'
-    },
-    USDT: {
-        address: '0xd7722b8d2a024a318284288409557f6f14ff9b34026949de11ed2dd671475c92',
-        privateKey: 'ed25519-priv-0xadf44a11ae912a9a811a784627f709f7b0d31c7328fe8795840140c6595c4536',
-        name: 'USDT'
-    },
-    RESOLVER: {
-        address: '0x38edf36a736e0d284fdf504a5e6fccfe229240aaf0bd7f5eec4504bfbf291028',
-        privateKey: 'ed25519-priv-0x141d138b003e1049f285eb2e05ec18f537d8fb61e5bc873263b688b1dd85f10c',
-        name: 'Resolver'
-    },
-    USER: {
-        address: '0x2709c26cf4a2596f10aed0b6533be35a70090372793c348c317ca2ce8c66f0d3',
-        privateKey: 'ed25519-priv-0x13e2b05956b9297849c722bff496bc2a068a709b685fc758234a23a8bddfea95',
-        name: 'User'
-    }
-}
 
-// Aptos network configuration
-const APTOS_NETWORK_CONFIG = {
-    network: Network.LOCAL
-}
-
-// Helper to create Aptos client
-function createAptosClient() {
-    const aptosConfig = new AptosConfig({
-        network: APTOS_NETWORK_CONFIG.network,
-    });
-    return new Aptos(aptosConfig)
-}
-
-// Helper to create account from private key
-function createAptosAccount(privateKey: string): Account {
-    const ed25519PrivateKey = new Ed25519PrivateKey(privateKey);
-    return Account.fromPrivateKey({ privateKey: ed25519PrivateKey });
-}
 
 // eslint-disable-next-line max-lines-per-function
 describe('Resolving example', () => {
@@ -124,6 +84,7 @@ describe('Resolving example', () => {
     let usdtMetadata: string
 
     async function increaseTime(t: number): Promise<void> {
+        // await Promise.all([src, dst].map((chain) => chain.provider.send('evm_increaseTime', [t])))
         // For Aptos, we need to actually wait since we can't modify time
         await new Promise(resolve => setTimeout(resolve, t * 1000))
     }
@@ -181,18 +142,24 @@ describe('Resolving example', () => {
         usdtMetadata = await fungibleHelper.getUsdtMetadata()
 
         // Create Aptos accounts
-        aptosUserAccount = createAptosAccount(APTOS_ACCOUNTS.USER.privateKey)
-        aptosResolverAccount = createAptosAccount(APTOS_ACCOUNTS.RESOLVER.privateKey)
+        aptosUserAccount = createAccount(APTOS_ACCOUNTS.USER.privateKey)
+        aptosResolverAccount = createAccount(APTOS_ACCOUNTS.RESOLVER.privateKey)
 
-        console.log('🔧 Fauceting APT to Aptos accounts...')
-        await aptosClient.faucet.fundAccount({
-            accountAddress: aptosUserAccount.accountAddress.toString(),
-            amount: 100_000_000 // 1 APT
-        });
-        await aptosClient.faucet.fundAccount({
-            accountAddress: aptosResolverAccount.accountAddress.toString(),
-            amount: 100_000_000 // 1 APT
-        });
+        // Get network from aptosClient
+        const network = aptosClient.config.network
+
+        // Only faucet APT on local network
+        if (network === 'local') {
+            console.log('🔧 Fauceting APT to Aptos accounts...')
+            await aptosClient.faucet.fundAccount({
+                accountAddress: aptosUserAccount.accountAddress.toString(),
+                amount: 100_000_000 // 1 APT
+            });
+            await aptosClient.faucet.fundAccount({
+                accountAddress: aptosResolverAccount.accountAddress.toString(),
+                amount: 100_000_000 // 1 APT
+            });
+        }
 
         console.log('🔧 Migrating APT to FungibleStore for Aptos accounts...')
         await fungibleHelper.migrateAptosCoinToFungibleStore(aptosUserAccount)
@@ -200,11 +167,20 @@ describe('Resolving example', () => {
 
         // Faucet USDT to resolver
         console.log('🪙 Fauceting USDT to Aptos resolver account...')
-        const usdtAccount = createAptosAccount(APTOS_ACCOUNTS.USDT.privateKey)
+        const usdtAccount = createAccount(APTOS_ACCOUNTS.USDT.privateKey)
         await fungibleHelper.faucetToAddress(
             usdtAccount,
             APTOS_ACCOUNTS.RESOLVER.address,
-            BigInt(1000_000_000) // 1000 USDT
+            BigInt(2000_000_000) // 1000 USDT
+        );
+
+
+        // Faucet USDT to resolver
+        console.log('🪙 Fauceting USDT to Aptos resolver account...')
+        await fungibleHelper.faucetToAddress(
+            usdtAccount,
+            APTOS_ACCOUNTS.USER.address,
+            BigInt(100_000_000) // 1000 USDT
         );
     })
 
@@ -224,6 +200,8 @@ describe('Resolving example', () => {
         }
     }
 
+
+
     afterAll(async () => {
         src.provider.destroy()
         dst.provider.destroy()
@@ -231,7 +209,7 @@ describe('Resolving example', () => {
     })
 
     // eslint-disable-next-line max-lines-per-function
-    describe('Fill', () => {
+    describe('ETH -> APT Fill', () => {
         it('should swap Ethereum USDC -> Aptos USDT. Single fill only', async () => {
             const initialBalances = await getBalances(
                 config.chain.source.tokens.USDC.address,
@@ -690,7 +668,7 @@ describe('Resolving example', () => {
 
             const fillAmount = sdkOrder.makingAmount / 2n
             const idx = Number((BigInt(secrets.length - 1) * (fillAmount - 1n)) / sdkOrder.makingAmount)
-            console.log(`[${srcChainId}]`, ` AVH Filling order ${orderHash} with fill amount ${fillAmount} and idx ${idx}`)
+            console.log(`[${srcChainId}]`, ` Filling order ${orderHash} with fill amount ${fillAmount} and idx ${idx}`)
 
 
             // Create hash from secret for Aptos
@@ -818,6 +796,214 @@ describe('Resolving example', () => {
             // Verify that the user transferred funds to resolver on ETH (50% fill)
             expect(initialBalances.src.user - resultBalances.src.user).toBe(fillAmount)
             expect(resultBalances.src.resolver - initialBalances.src.resolver).toBe(fillAmount)
+        })
+
+    })
+
+    // eslint-disable-next-line max-lines-per-function
+    describe('APT -> ETH Fill', () => {
+        it('should swap Aptos USDT -> Ethereum USDC. Single fill only', async () => {
+            const initialBalances = await getBalances(
+                config.chain.source.tokens.USDC.address,
+                config.chain.destination.tokens.USDC.address
+            )
+
+            // Create secret for cross-chain swap
+            const secret = uint8ArrayToHex(randomBytes(32)) // note: use crypto secure random number in real world
+            const secretBytes = new Uint8Array(Buffer.from(secret.startsWith('0x') ? secret.slice(2) : secret, 'hex'))
+
+            // Create hash from secret for Aptos
+            const secretHash = await hashlockHelper.createHashFromSecret(secretBytes)
+            const secretHashBytes = new Uint8Array(Buffer.from(secretHash.startsWith('0x') ? secretHash.slice(2) : secretHash, 'hex'))
+
+            // Create SDK order for ETH side with dummy source chain values and real destination values
+            const sdkOrder = Sdk.CrossChainOrder.new(
+                new Address('0x0000000000000000000000000000000000000000'), // Dummy APT escrow factory
+                {
+                    salt: Sdk.randBigInt(1000n),
+                    maker: new Address('0x0000000000000000000000000000000000000000'), // Dummy APT maker
+                    makingAmount: parseUnits('99', 6), // 99 USDT (6 decimals) - APT side
+                    takingAmount: parseUnits('100', 6), // 100 USDC (6 decimals) - ETH side
+                    makerAsset: new Address('0x0000000000000000000000000000000000000000'), // Dummy APT USDT
+                    takerAsset: new Address(config.chain.destination.tokens.USDC.address) // Real ETH USDC
+                },
+                {
+                    hashLock: Sdk.HashLock.forSingleFill(secret),
+                    timeLocks: Sdk.TimeLocks.new({
+                        srcWithdrawal: 10n, // 10sec finality lock for test
+                        srcPublicWithdrawal: 120n, // 2m for private withdrawal
+                        srcCancellation: 121n, // 1sec public withdrawal
+                        srcPublicCancellation: 122n, // 1sec private cancellation
+                        dstWithdrawal: 10n, // 10sec finality lock for test
+                        dstPublicWithdrawal: 100n, // 100sec private withdrawal
+                        dstCancellation: 101n // 1sec public withdrawal
+                    }),
+                    srcChainId: 100, // Dummy APT chain ID
+                    dstChainId, // Real ETH chain ID
+                    srcSafetyDeposit: parseEther('0.001'), // Dummy APT safety deposit
+                    dstSafetyDeposit: parseEther('0.001') // Real ETH safety deposit
+                },
+                {
+                    auction: new Sdk.AuctionDetails({
+                        initialRateBump: 0,
+                        points: [],
+                        duration: 120n,
+                        startTime: srcTimestamp
+                    }),
+                    whitelist: [
+                        {
+                            address: new Address('0x0000000000000000000000000000000000000000'), // Dummy APT resolver
+                            allowFrom: 0n
+                        }
+                    ],
+                    resolvingStartTime: 0n
+                },
+                {
+                    nonce: Sdk.randBigInt(UINT_40_MAX),
+                    allowPartialFills: false,
+                    allowMultipleFills: false
+                }
+            )
+
+            // Create fusion order on Aptos (source chain) - USER creates this
+            console.log('📝 Creating fusion order on Aptos (source chain)...')
+            const order_hash = new Uint8Array(Buffer.from('order_hash_123', 'utf8'))
+            const hashes = [secretHashBytes] // Single hash for full fill
+            const makerAsset = usdtMetadata // USDT metadata address
+            const resolver_whitelist = [APTOS_ACCOUNTS.RESOLVER.address] // Only this resolver can fill
+            const safety_deposit_amount = BigInt(10_000) // 0.0001 APT (8 decimals)
+            const finality_duration = BigInt(10) // 10 seconds - matches SDK srcWithdrawal
+            const exclusive_duration = BigInt(10) // 10 seconds - matches SDK srcWithdrawal
+            const private_cancellation_duration = BigInt(10) // 10 seconds - matches SDK srcWithdrawal
+            const amount = BigInt(99_000_000) // 99 USDT (6 decimals)
+
+            const fusionOrderResult = await fusionOrderHelper.createOrder(
+                aptosUserAccount, // USER creates the fusion order
+                order_hash,
+                [secretHashBytes], // Single hash for full fill
+                makerAsset, // metadata
+                amount,
+                resolver_whitelist,
+                safety_deposit_amount,
+                finality_duration,
+                exclusive_duration,
+                private_cancellation_duration
+            );
+
+            console.log(`✅ Fusion order created! Order address: ${fusionOrderResult.orderAddress}`)
+            expect(fusionOrderResult.orderAddress).toBeDefined()
+            expect(fusionOrderResult.orderAddress).not.toBe('')
+
+            // RESOLVER fills the fusion order on Aptos (source chain)
+            console.log('🔒 Creating escrow from fusion order on Aptos...')
+            const escrowResult = await escrowHelper.createEscrowFromOrderSingleFill(
+                aptosResolverAccount, // RESOLVER fills the fusion order
+                fusionOrderResult.orderAddress
+            );
+
+            console.log(`✅ Escrow created! Escrow address: ${escrowResult.escrowAddress}`)
+            expect(escrowResult.escrowAddress).toBeDefined()
+            expect(escrowResult.escrowAddress).not.toBe('')
+
+            // Wait for the escrow to be processed (10 seconds to match finality_duration)
+            await increaseTime(11)
+
+            // Resolver fills order on destination chain (ETH)
+            const resolverContract = new Resolver(src.resolver, dst.resolver)
+
+            console.log(`[${dstChainId}]`, `Filling order on ETH (destination chain)`)
+
+            // Create dst immutables for ETH side
+            const dstImmutablesBase = Sdk.Immutables.new({
+                orderHash: sdkOrder.getOrderHash(100), // Dummy APT chain ID
+                hashLock: Sdk.HashLock.forSingleFill(secret),
+                maker: new Address(await dstChainUser.getAddress()), // ETH maker
+                taker: new Address(resolverContract.dstAddress), // ETH taker
+                token: new Address(config.chain.destination.tokens.USDC.address), // ETH USDC
+                amount: sdkOrder.takingAmount, // ETH taking amount
+                safetyDeposit: parseEther('0.001'), // Real ETH safety deposit
+                timeLocks: Sdk.TimeLocks.new({
+                    srcWithdrawal: 10n,
+                    srcPublicWithdrawal: 120n,
+                    srcCancellation: 121n,
+                    srcPublicCancellation: 122n,
+                    dstWithdrawal: 10n,
+                    dstPublicWithdrawal: 100n,
+                    dstCancellation: 101n
+                })
+            })
+
+            const dstComplement = Sdk.DstImmutablesComplement.new({
+                maker: new Address(await dstChainUser.getAddress()), // ETH maker
+                amount: sdkOrder.takingAmount, // ETH taking amount
+                token: new Address(config.chain.destination.tokens.USDC.address), // ETH USDC
+                safetyDeposit: parseEther('0.001') // Real ETH safety deposit
+            })
+
+            const signature = await srcChainUser.signOrder(srcChainId, sdkOrder)
+            const orderHash = sdkOrder.getOrderHash(srcChainId)
+            const dstImmutables = dstImmutablesBase.withComplement(dstComplement)
+
+            console.log(`[${srcChainId}]`, `Filling order ${orderHash}`)
+            const {txHash: orderFillHash, blockHash: dstDeployBlock, blockTimestamp: dstDeployedAt} =
+                await dstChainResolver.send(
+                    resolverContract.deploySrc(
+                        srcChainId,
+                        sdkOrder,
+                        signature,
+                        Sdk.TakerTraits.default()
+                            .setExtension(sdkOrder.extension)
+                            .setAmountMode(Sdk.AmountMode.maker)
+                            .setAmountThreshold(sdkOrder.takingAmount),
+                        sdkOrder.makingAmount
+                    )
+            )
+
+            console.log(`[${dstChainId}]`, `Order filled for ${sdkOrder.takingAmount} in tx ${orderFillHash}`)
+
+            const ESCROW_DST_IMPLEMENTATION = await dstFactory.getDestinationImpl()
+
+            const dstEscrowAddress = new Sdk.EscrowFactory(new Address(dst.escrowFactory)).getDstEscrowAddress(
+                dstImmutablesBase,
+                dstComplement,
+                dstDeployedAt,
+                new Address(resolverContract.dstAddress),
+                ESCROW_DST_IMPLEMENTATION
+            )
+
+            // Withdraw from Aptos escrow using the secret
+            console.log('💰 Withdrawing from Aptos escrow...')
+            const aptosWithdrawTxHash = await escrowHelper.withdrawFromEscrow(
+                aptosResolverAccount,
+                escrowResult.escrowAddress,
+                secret
+            );
+
+            console.log(`✅ Aptos withdrawal successful! Transaction: ${aptosWithdrawTxHash}`)
+            expect(aptosWithdrawTxHash).toBeDefined()
+
+            // Withdraw from ETH escrow using the secret
+            console.log(`[${dstChainId}]`, `Withdrawing funds for resolver from ETH escrow`)
+            const {txHash: resolverWithdrawHash} =
+            await dstChainResolver.send(
+                resolverContract.withdraw('dst', dstEscrowAddress, secret, dstImmutables.withDeployedAt(dstDeployedAt))
+            )
+            console.log(
+                `[${dstChainId}]`,
+                `Withdrew funds for resolver from ETH escrow to ${dst.resolver} in tx ${resolverWithdrawHash}`
+            )
+
+            const resultBalances = await getBalances(
+                config.chain.source.tokens.USDC.address,
+                config.chain.destination.tokens.USDC.address
+            )
+
+            // Verify the cross-chain swap worked
+            console.log('🎉 Complete APT → ETH swap flow test completed!')
+
+            // Verify that the resolver transferred funds to user on ETH
+            expect(resultBalances.dst.user - initialBalances.dst.user).toBe(sdkOrder.takingAmount)
+            expect(initialBalances.dst.resolver - resultBalances.dst.resolver).toBe(sdkOrder.takingAmount)
         })
 
     })
