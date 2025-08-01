@@ -1,5 +1,5 @@
 import { Aptos } from '@aptos-labs/ts-sdk'
-import { ACCOUNTS, createAptosClient, NETWORK_CONFIG } from '../setup'
+import { ACCOUNTS, createAptosClient } from '../setup'
 import { execSync } from 'child_process'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
