@@ -251,18 +251,22 @@ export class EscrowHelper {
         secret: string | Uint8Array
     ): Promise<string> {
         try {
-            console.log('🔧 Withdrawing from escrow:', escrowAddress);
-            // Convert to bytes if it's a string
-            const secretBytes = typeof secret === 'string'
-                ? new Uint8Array(Buffer.from(secret.startsWith('0x') ? secret.slice(2) : secret, 'hex'))
-                : secret;
+            console.log('💰 Withdrawing from escrow:', escrowAddress);
+
+            // Convert secret to bytes if it's a string
+            let secretBytes: Uint8Array;
+            if (typeof secret === 'string') {
+                secretBytes = new Uint8Array(Buffer.from(secret.startsWith('0x') ? secret.slice(2) : secret, 'hex'));
+            } else {
+                secretBytes = secret;
+            }
 
             const transaction = await this.client.transaction.build.simple({
                 sender: resolver.accountAddress,
                 data: {
-                    function: `${this.fusionAddress}::escrow::withdraw`,
+                    function: `${this.fusionAddress}::router::escrow_withdraw`,
                     typeArguments: [],
-                    functionArguments: [escrowAddress, Array.from(secretBytes)]
+                    functionArguments: [escrowAddress, secretBytes]
                 },
             });
 
@@ -277,9 +281,46 @@ export class EscrowHelper {
             });
 
             await this.client.waitForTransaction({ transactionHash: submitResponse.hash });
+
             return submitResponse.hash;
         } catch (error) {
             console.log(`Error withdrawing from escrow: ${error}`);
+            throw error;
+        }
+    }
+
+    // Cancel escrow (when user doesn't share secret)
+    async cancelEscrow(
+        resolver: Account,
+        escrowAddress: string
+    ): Promise<string> {
+        try {
+            console.log('❌ Cancelling escrow:', escrowAddress);
+
+            const transaction = await this.client.transaction.build.simple({
+                sender: resolver.accountAddress,
+                data: {
+                    function: `${this.fusionAddress}::router::escrow_recovery`,
+                    typeArguments: [],
+                    functionArguments: [escrowAddress]
+                },
+            });
+
+            const resolverSignature = await this.client.transaction.sign({
+                signer: resolver,
+                transaction,
+            });
+
+            const submitResponse = await this.client.transaction.submit.simple({
+                transaction,
+                senderAuthenticator: resolverSignature,
+            });
+
+            await this.client.waitForTransaction({ transactionHash: submitResponse.hash });
+
+            return submitResponse.hash;
+        } catch (error) {
+            console.log(`Error cancelling escrow: ${error}`);
             throw error;
         }
     }
