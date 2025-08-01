@@ -14,32 +14,39 @@ export class FusionOrderHelper {
     async createOrder(
         user: Account,
         order_hash: Uint8Array,
-        hash: Uint8Array,
+        hashes: Uint8Array[],
         metadata: string,
         amount: bigint,
+        resolver_whitelist: string[],
         safety_deposit_amount: bigint,
         finality_duration: bigint,
         exclusive_duration: bigint,
-        private_cancellation_duration: bigint
+        private_cancellation_duration: bigint,
+        auto_cancel_after?: bigint
     ): Promise<{ txHash: string; orderAddress: string }> {
         try {
             console.log('🔧 Creating fusion order with order_hash:', order_hash);
-            console.log('🔧 Creating fusion order with hash:', hash);
+            console.log('🔧 Creating fusion order with hashes:', hashes.length);
+
+            const functionArguments = [
+                order_hash,
+                hashes.map(hash => Array.from(hash)),
+                metadata,
+                amount,
+                safety_deposit_amount,
+                resolver_whitelist,
+                finality_duration,
+                exclusive_duration,
+                private_cancellation_duration,
+                auto_cancel_after ? [auto_cancel_after] : undefined
+            ];
+
             const transaction = await this.client.transaction.build.simple({
                 sender: user.accountAddress,
                 data: {
-                    function: `${this.fusionAddress}::fusion_order::new_entry`,
+                    function: `${this.fusionAddress}::router::create_fusion_order`,
                     typeArguments: [],
-                    functionArguments: [
-                        order_hash,
-                        hash,
-                        metadata,
-                        amount,
-                        safety_deposit_amount,
-                        finality_duration,
-                        exclusive_duration,
-                        private_cancellation_duration
-                    ]
+                    functionArguments
                 },
             });
 
@@ -68,23 +75,6 @@ export class FusionOrderHelper {
         }
     }
 
-    // Get order details
-    async getOrder(orderId: string): Promise<any> {
-        try {
-            const response = await this.client.view({
-                payload: {
-                    function: `${this.fusionAddress}::fusion_order::get_order`,
-                    typeArguments: [],
-                    functionArguments: [orderId]
-                }
-            });
-            return response[0];
-        } catch (error) {
-            console.log(`Error getting order: ${error}`);
-            return null;
-        }
-    }
-
     // Cancel order
     async cancelOrder(
         user: Account,
@@ -94,7 +84,7 @@ export class FusionOrderHelper {
             const transaction = await this.client.transaction.build.simple({
                 sender: user.accountAddress,
                 data: {
-                    function: `${this.fusionAddress}::fusion_order::cancel_order`,
+                    function: `${this.fusionAddress}::router::cancel_fusion_order`,
                     typeArguments: [],
                     functionArguments: [orderId]
                 },
@@ -115,6 +105,23 @@ export class FusionOrderHelper {
         } catch (error) {
             console.log(`Error canceling order: ${error}`);
             throw error;
+        }
+    }
+
+    // Get order details
+    async getOrder(orderId: string): Promise<any> {
+        try {
+            const response = await this.client.view({
+                payload: {
+                    function: `${this.fusionAddress}::fusion_order::get_order`,
+                    typeArguments: [],
+                    functionArguments: [orderId]
+                }
+            });
+            return response[0];
+        } catch (error) {
+            console.log(`Error getting order: ${error}`);
+            return null;
         }
     }
 
@@ -165,5 +172,10 @@ export class FusionOrderHelper {
             console.log(`Error extracting order address: ${error}`);
             return '';
         }
+    }
+
+    // Helper function to get safety deposit metadata
+    private safety_deposit_metadata(): string {
+        return '0xa'; // APT metadata address
     }
 }

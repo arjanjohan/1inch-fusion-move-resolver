@@ -19,9 +19,9 @@ export class DeploymentHelper {
             // Try to call a view function from the fusion package
             const response = await this.client.view({
                 payload: {
-                    function: `${ACCOUNTS.FUSION.address}::resolver_registry::is_active_resolver`,
+                    function: `${ACCOUNTS.FUSION.address}::escrow::safety_deposit_metadata`,
                     typeArguments: [],
-                    functionArguments: ["0x0"]
+                    functionArguments: []
                 }
             });
             console.log('✅ Fusion contracts are already deployed')

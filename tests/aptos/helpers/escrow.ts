@@ -10,17 +10,17 @@ export class EscrowHelper {
         this.fusionAddress = ACCOUNTS.FUSION.address
     }
 
-    // Create escrow from fusion order
-    async createEscrowFromOrder(
+    // Create escrow from fusion order (single fill)
+    async createEscrowFromOrderSingleFill(
         resolver: Account,
         fusionOrder: string
     ): Promise<{ txHash: string; escrowAddress: string }> {
         try {
-            console.log('🔧 Creating escrow from fusion order:', fusionOrder);
+            console.log('🔧 Creating escrow from fusion order (single fill):', fusionOrder);
             const transaction = await this.client.transaction.build.simple({
                 sender: resolver.accountAddress,
                 data: {
-                    function: `${this.fusionAddress}::escrow::deploy_source_entry`,
+                    function: `${this.fusionAddress}::router::deploy_source_single_fill`,
                     typeArguments: [],
                     functionArguments: [fusionOrder]
                 },
@@ -51,34 +51,65 @@ export class EscrowHelper {
         }
     }
 
-    // Create escrow from resolver
-    async createEscrowFromResolver(
+    // Create escrow from fusion order (partial fill)
+    async createEscrowFromOrderPartialFill(
         resolver: Account,
-        order_hash: Uint8Array,
-        hash: Uint8Array,
-        taker: string,
-        metadata: string,
-        amount: bigint,
-        safety_deposit_amount: bigint,
+        fusionOrder: string,
+        segment: number
+    ): Promise<{ txHash: string; escrowAddress: string }> {
+        try {
+            console.log('🔧 Creating escrow from fusion order (partial fill):', fusionOrder, 'segment:', segment);
+            const transaction = await this.client.transaction.build.simple({
+                sender: resolver.accountAddress,
+                data: {
+                    function: `${this.fusionAddress}::router::deploy_source_partial_fill`,
+                    typeArguments: [],
+                    functionArguments: [fusionOrder, segment]
+                },
+            });
+
+            const resolverSignature = await this.client.transaction.sign({
+                signer: resolver,
+                transaction,
+            });
+
+            const submitResponse = await this.client.transaction.submit.simple({
+                transaction,
+                senderAuthenticator: resolverSignature,
+            });
+
+            const txResult = await this.client.waitForTransaction({ transactionHash: submitResponse.hash });
+
+            // Extract escrow address from events
+            const escrowAddress = this.extractEscrowAddressFromEvents(txResult);
+
+            return {
+                txHash: submitResponse.hash,
+                escrowAddress: escrowAddress
+            };
+        } catch (error) {
+            console.log(`Error creating escrow from order: ${error}`);
+            throw error;
+        }
+    }
+
+    // Create escrow from Dutch auction (single fill)
+    async createEscrowFromAuctionSingleFill(
+        resolver: Account,
+        auction: string,
         finality_duration: bigint,
         exclusive_duration: bigint,
         private_cancellation_duration: bigint
     ): Promise<{ txHash: string; escrowAddress: string }> {
         try {
-            console.log('🔧 Creating escrow from resolver:', resolver.accountAddress.toString());
-
+            console.log('🔧 Creating escrow from auction (single fill):', auction);
             const transaction = await this.client.transaction.build.simple({
                 sender: resolver.accountAddress,
                 data: {
-                    function: `${this.fusionAddress}::escrow::deploy_destination_entry`,
+                    function: `${this.fusionAddress}::router::deploy_destination_single_fill`,
                     typeArguments: [],
                     functionArguments: [
-                        order_hash,
-                        hash,
-                        taker,
-                        metadata,
-                        amount,
-                        safety_deposit_amount,
+                        auction,
                         finality_duration,
                         exclusive_duration,
                         private_cancellation_duration
@@ -106,9 +137,85 @@ export class EscrowHelper {
                 escrowAddress: escrowAddress
             };
         } catch (error) {
-            console.log(`Error creating escrow from resolver: ${error}`);
+            console.log(`Error creating escrow from auction: ${error}`);
             throw error;
         }
+    }
+
+    // Create escrow from Dutch auction (partial fill)
+    async createEscrowFromAuctionPartialFill(
+        resolver: Account,
+        auction: string,
+        segment: number,
+        finality_duration: bigint,
+        exclusive_duration: bigint,
+        private_cancellation_duration: bigint
+    ): Promise<{ txHash: string; escrowAddress: string }> {
+        try {
+            console.log('🔧 Creating escrow from auction (partial fill):', auction, 'segment:', segment);
+            const transaction = await this.client.transaction.build.simple({
+                sender: resolver.accountAddress,
+                data: {
+                    function: `${this.fusionAddress}::router::deploy_destination_partial_fill`,
+                    typeArguments: [],
+                    functionArguments: [
+                        auction,
+                        segment,
+                        finality_duration,
+                        exclusive_duration,
+                        private_cancellation_duration
+                    ]
+                },
+            });
+
+            const resolverSignature = await this.client.transaction.sign({
+                signer: resolver,
+                transaction,
+            });
+
+            const submitResponse = await this.client.transaction.submit.simple({
+                transaction,
+                senderAuthenticator: resolverSignature,
+            });
+
+            const txResult = await this.client.waitForTransaction({ transactionHash: submitResponse.hash });
+
+            // Extract escrow address from events
+            const escrowAddress = this.extractEscrowAddressFromEvents(txResult);
+
+            return {
+                txHash: submitResponse.hash,
+                escrowAddress: escrowAddress
+            };
+        } catch (error) {
+            console.log(`Error creating escrow from auction: ${error}`);
+            throw error;
+        }
+    }
+
+    // Legacy function for backward compatibility
+    async createEscrowFromOrder(
+        resolver: Account,
+        fusionOrder: string
+    ): Promise<{ txHash: string; escrowAddress: string }> {
+        return this.createEscrowFromOrderSingleFill(resolver, fusionOrder);
+    }
+
+    // Legacy function for backward compatibility
+    async createEscrowFromResolver(
+        resolver: Account,
+        order_hash: Uint8Array,
+        hash: Uint8Array,
+        taker: string,
+        metadata: string,
+        amount: bigint,
+        safety_deposit_amount: bigint,
+        finality_duration: bigint,
+        exclusive_duration: bigint,
+        private_cancellation_duration: bigint
+    ): Promise<{ txHash: string; escrowAddress: string }> {
+        // This function is deprecated - use createEscrowFromAuctionSingleFill instead
+        throw new Error('createEscrowFromResolver is deprecated. Use createEscrowFromAuctionSingleFill instead.');
     }
 
     // Verify secret in escrow
