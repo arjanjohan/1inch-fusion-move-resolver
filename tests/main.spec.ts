@@ -87,39 +87,27 @@ describe('Resolving example', () => {
     }
 
     beforeAll(async () => {
-        console.log('🚀 Starting beforeAll setup...')
+
         const startTime = Date.now()
 
-        console.log('⏱️  Initializing EVM chain...')
-        const evmStartTime = Date.now()
-        evm = await initChain(config.chain.evm)
-        console.log(`✅ EVM chain initialized in ${Date.now() - evmStartTime}ms`)
 
-        console.log('👤 Creating EVM wallets...')
+        evm = await initChain(config.chain.evm)
+
         evmChainUser = new Wallet(userPk, evm.provider)
         evmChainResolver = new Wallet(resolverPk, evm.provider)
         evmFactory = new EscrowFactory(evm.provider, evm.escrowFactory)
-        console.log('✅ EVM wallets created')
 
-        console.log('💰 Topping up USDC for user...')
-        const topUpStartTime = Date.now()
         await evmChainUser.topUpFromDonor(
             config.chain.evm.tokens.USDC.address,
             config.chain.evm.tokens.USDC.donor,
             parseUnits('1000', 6)
         )
-        console.log(`✅ User USDC topped up in ${Date.now() - topUpStartTime}ms`)
 
-        console.log('🔐 Approving USDC for LOP...')
-        const approveStartTime = Date.now()
         await evmChainUser.approveToken(
             config.chain.evm.tokens.USDC.address,
             config.chain.evm.limitOrderProtocol,
             MaxUint256
         )
-        console.log(`✅ USDC approved in ${Date.now() - approveStartTime}ms`)
-        console.log('🏗️  Setting up resolver contract...')
-        const resolverStartTime = Date.now()
         evmResolverContract = await Wallet.fromAddress(evm.resolver, evm.provider)
         await evmResolverContract.topUpFromDonor(
             config.chain.evm.tokens.USDC.address,
@@ -128,26 +116,14 @@ describe('Resolving example', () => {
         )
         await evmChainResolver.transfer(evm.resolver, parseEther('1'))
         await evmResolverContract.unlimitedApprove(config.chain.evm.tokens.USDC.address, evm.escrowFactory)
-        console.log(`✅ Resolver contract setup in ${Date.now() - resolverStartTime}ms`)
 
-        console.log('⏰ Getting latest block timestamp...')
-        const timestampStartTime = Date.now()
         srcTimestamp = BigInt((await evm.provider.getBlock('latest'))!.timestamp)
-        console.log(`✅ Timestamp obtained in ${Date.now() - timestampStartTime}ms`)
 
-        console.log('🔧 Initializing Aptos client...')
-        const aptosStartTime = Date.now()
         aptosClient = createAptosClient()
-        console.log(`✅ Aptos client initialized in ${Date.now() - aptosStartTime}ms`)
 
-        console.log('📦 Checking and deploying contracts...')
-        const deployStartTime = Date.now()
         const deploymentHelper = new DeploymentHelper()
         await deploymentHelper.ensureContractsDeployed()
-        console.log(`✅ Contracts deployed in ${Date.now() - deployStartTime}ms`)
 
-        console.log('🛠️  Initializing Aptos helpers...')
-        const helpersStartTime = Date.now()
         fungibleHelper = new FungibleAssetsHelper()
         escrowHelper = new EscrowHelper()
         hashlockHelper = new HashlockHelper()
@@ -155,13 +131,10 @@ describe('Resolving example', () => {
         dutchAuctionHelper = new DutchAuctionHelper()
         timelockHelper = new TimelockHelper()
         usdtMetadata = await fungibleHelper.getUsdtMetadata()
-        console.log(`✅ Aptos helpers initialized in ${Date.now() - helpersStartTime}ms`)
 
-        console.log('👤 Creating Aptos accounts...')
-        const accountsStartTime = Date.now()
+
         aptosUserAccount = createAccount(APTOS_ACCOUNTS.USER.privateKey)
         aptosResolverAccount = createAccount(APTOS_ACCOUNTS.RESOLVER.privateKey)
-        console.log(`✅ Aptos accounts created in ${Date.now() - accountsStartTime}ms`)
 
         const network = aptosClient.config.network
         console.log(`🌐 Aptos network: ${network}`)
@@ -181,29 +154,21 @@ describe('Resolving example', () => {
         }
 
         console.log('🔧 Migrating APT to FungibleStore...')
-        const migrateStartTime = Date.now()
         await fungibleHelper.migrateAptosCoinToFungibleStore(aptosUserAccount)
         await fungibleHelper.migrateAptosCoinToFungibleStore(aptosResolverAccount)
-        console.log(`✅ APT migrated in ${Date.now() - migrateStartTime}ms`)
 
-        console.log('🪙 Fauceting USDT to Aptos resolver account...')
-        const usdtResolverStartTime = Date.now()
         const usdtAccount = createAccount(APTOS_ACCOUNTS.USDT.privateKey)
         await fungibleHelper.faucetToAddress(
             usdtAccount,
             APTOS_ACCOUNTS.RESOLVER.address,
             BigInt(2000_000_000) // 1000 USDT
         );
-        console.log(`✅ USDT fauceted to resolver in ${Date.now() - usdtResolverStartTime}ms`)
 
-        console.log('🪙 Fauceting USDT to Aptos User account...')
-        const usdtUserStartTime = Date.now()
         await fungibleHelper.faucetToAddress(
             usdtAccount,
             APTOS_ACCOUNTS.USER.address,
             BigInt(100_000_000) // 1000 USDT
         );
-        console.log(`✅ USDT fauceted to user in ${Date.now() - usdtUserStartTime}ms`)
 
         console.log(`🎉 beforeAll completed in ${Date.now() - startTime}ms`)
     })
@@ -717,8 +682,6 @@ describe('Resolving example', () => {
 
             const fillAmount = sdkOrder.makingAmount / 2n
             const idx = Number((BigInt(secrets.length - 1) * (fillAmount - 1n)) / sdkOrder.makingAmount)
-            console.log(`[${srcChainId}]`, ` Filling order ${orderHash} with fill amount ${fillAmount} and idx ${idx}`)
-
 
             // Create hash from secret for Aptos
             const secretHash = secretHashes[idx]
