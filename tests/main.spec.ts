@@ -837,6 +837,10 @@ describe('Resolving example', () => {
                 config.chain.evm.tokens.USDC.address
             )
 
+            // Get initial Aptos balances
+            const initialAptosUserBalance = await fungibleHelper.getBalance(aptosUserAccount.accountAddress.toString(), usdtMetadata)
+            const initialAptosResolverBalance = await fungibleHelper.getBalance(aptosResolverAccount.accountAddress.toString(), usdtMetadata)
+
             // Create secret for cross-chain swap
             const secret = uint8ArrayToHex(randomBytes(32)) // note: use crypto secure random number in real world
             const secretBytes = new Uint8Array(Buffer.from(secret.startsWith('0x') ? secret.slice(2) : secret, 'hex'))
@@ -952,7 +956,7 @@ describe('Resolving example', () => {
                 maker: new Address(await evmChainUser.getAddress()), // ETH maker
                 taker: new Address(resolverContract.dstAddress), // ETH taker
                 token: new Address(config.chain.evm.tokens.USDC.address), // ETH USDC
-                amount: sdkOrder.takingAmount, // ETH taking amount
+                amount: sdkOrder.makingAmount, // ETH taking amount
                 safetyDeposit: parseEther('0.001'), // Real ETH safety deposit
                 timeLocks: Sdk.TimeLocks.new({
                     srcWithdrawal: 10n,
@@ -967,7 +971,7 @@ describe('Resolving example', () => {
 
             const dstComplement = Sdk.DstImmutablesComplement.new({
                 maker: new Address(await evmChainUser.getAddress()), // ETH maker
-                amount: sdkOrder.makingAmount, // ETH making amount
+                amount: sdkOrder.takingAmount, // ETH making amount
                 token: new Address(config.chain.evm.tokens.USDC.address), // ETH USDC
                 safetyDeposit: parseEther('0.001') // Real ETH safety deposit
             })
@@ -979,8 +983,6 @@ describe('Resolving example', () => {
                 .withComplement(dstComplement)
                 .withTaker(new Address(resolverContract.dstAddress))
                 .withDeployedAt(BigInt(currentTime))
-
-            console.log('🔒 AVH DST IMMUTABLES: ', dstImmutables)
 
             console.log(`[${dstChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
             const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await evmChainResolver.send(
@@ -1029,17 +1031,21 @@ describe('Resolving example', () => {
             console.log(`✅ Aptos withdrawal successful! Transaction: ${aptosWithdrawTxHash}`)
             expect(aptosWithdrawTxHash).toBeDefined()
 
-            console.log('🔒 AVH DST dstDeployedAt: ', dstDeployedAt)
-
-            let dstImmutablesWithDeployedAt = dstImmutables.withDeployedAt(dstDeployedAt)
-            console.log(`[${dstChainId}]`, `ETH Dst immutables: ${dstImmutablesWithDeployedAt}`)
-
             // Verify the cross-chain swap worked
             console.log('🎉 Complete APT → ETH swap flow test completed!')
 
             // Verify that the resolver transferred funds to user on ETH
             expect(resultBalances.evm.user - initialBalances.evm.user).toBe(sdkOrder.takingAmount)
             expect(initialBalances.evm.resolver - resultBalances.evm.resolver).toBe(sdkOrder.takingAmount)
+
+            // Verify Aptos balances
+            const finalAptosUserBalance = await fungibleHelper.getBalance(aptosUserAccount.accountAddress.toString(), usdtMetadata)
+            const finalAptosResolverBalance = await fungibleHelper.getBalance(aptosResolverAccount.accountAddress.toString(), usdtMetadata)
+
+            // Verify that the user received USDT on Aptos (amount should match the swap)
+            expect(initialAptosUserBalance - finalAptosUserBalance).toBe(BigInt(99_000_000)) // 99 USDT (6 decimals)
+            // Verify that the resolver's USDT balance decreased (they paid for the swap)
+            expect(finalAptosResolverBalance - initialAptosResolverBalance).toBe(BigInt(99_000_000)) // 99 USDT (6 decimals)
         })
 
     })

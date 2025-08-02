@@ -13,7 +13,7 @@ export const ACCOUNTS = {
         name: 'USDT'
     },
     USER: {
-        address: '0x160df7d8e10750b56b86779cc8f400ad4145fad6cfd1a16dfb532c07302bcf8b',
+        address: '0x8a4a02a3a707fdf7f81ee9ece1e02db3aa1888c6283a12f4abf9d81cc8275a60',
         privateKey: process.env.APTOS_USER_PRIVATE_KEY || 'ed25519-priv-0x13e2b05956b9297849c722bff496bc2a068a709b685fc758234a23a8bddfea95',
         name: 'User'
     },
@@ -32,6 +32,13 @@ export const LOCAL_NETWORK_CONFIG = {
 // Network configuration
 export const APTOS_CONFIG = {
     network: Network.TESTNET,
+    // Add caching for better performance
+    clientConfig: {
+        API_KEY: process.env.APTOS_API_KEY || 'aptoslabs_K2CVa5cSJ11_AE5Nfy4iAPR8YWq2cviMshnDsD7AQHeE3'
+        // ,
+        // // Add timeout to prevent hanging
+        // timeout: 30000
+    }
 }
 
 export const MOVEMENT_CONFIG = {

@@ -26,8 +26,6 @@ export class FusionOrderHelper {
         auto_cancel_after?: bigint
     ): Promise<{ txHash: string; orderAddress: string }> {
         try {
-            console.log('🔧 Creating fusion order with order_hash:', order_hash);
-            console.log('🔧 Creating fusion order with hashes:', hashes.length);
 
             const functionArguments = [
                 order_hash,
@@ -136,21 +134,17 @@ export class FusionOrderHelper {
             for (const event of events) {
                 // Check if this is a fusion order creation event
                 if (event.type && event.type.includes('fusion_order::FusionOrderCreatedEvent')) {
-                    console.log('📝 Found FusionOrderCreatedEvent:', event);
 
                     // The fusion_order field contains the order address
                     if (event.data && event.data.fusion_order) {
-                        console.log('📦 Fusion order object:', event.data.fusion_order);
 
                         // If fusion_order is an object, it might have an inner property
                         if (typeof event.data.fusion_order === 'object' && event.data.fusion_order.inner) {
-                            console.log(`📦 Found order address in fusion_order.inner: ${event.data.fusion_order.inner}`);
                             return event.data.fusion_order.inner;
                         }
 
                         // If fusion_order is a string, return it directly
                         if (typeof event.data.fusion_order === 'string') {
-                            console.log(`📦 Found order address in fusion_order: ${event.data.fusion_order}`);
                             return event.data.fusion_order;
                         }
 
@@ -158,7 +152,6 @@ export class FusionOrderHelper {
                         if (typeof event.data.fusion_order === 'object') {
                             for (const [key, value] of Object.entries(event.data.fusion_order)) {
                                 if (typeof value === 'string' && value.startsWith('0x') && value.length === 66) {
-                                    console.log(`📦 Found order address in fusion_order.${key}: ${value}`);
                                     return value;
                                 }
                             }
@@ -167,8 +160,6 @@ export class FusionOrderHelper {
                 }
             }
 
-            console.log('⚠️ No FusionOrderCreatedEvent found in transaction');
-            console.log('📋 Available events:', events);
             return '';
         } catch (error) {
             console.log(`Error extracting order address: ${error}`);

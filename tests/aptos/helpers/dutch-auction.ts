@@ -25,8 +25,6 @@ export class DutchAuctionHelper {
         resolver_whitelist: string[]
     ): Promise<{ txHash: string; auctionAddress: string }> {
         try {
-            console.log('🔧 Creating Dutch auction with order_hash:', order_hash);
-            console.log('🔧 Creating Dutch auction with hashes:', hashes.length);
 
             const functionArguments = [
                 Array.from(order_hash),
@@ -184,21 +182,17 @@ export class DutchAuctionHelper {
             for (const event of events) {
                 // Look for DutchAuctionCreatedEvent
                 if (event.type && event.type.includes('dutch_auction::DutchAuctionCreatedEvent')) {
-                    console.log('📝 Found DutchAuctionCreatedEvent:', event);
 
                     // The auction field contains the auction address
                     if (event.data && event.data.auction) {
-                        console.log('📦 Auction object:', event.data.auction);
 
                         // If auction is an object, it might have an inner property
                         if (typeof event.data.auction === 'object' && event.data.auction.inner) {
-                            console.log(`📦 Found auction address in auction.inner: ${event.data.auction.inner}`);
                             return event.data.auction.inner;
                         }
 
                         // If auction is a string, return it directly
                         if (typeof event.data.auction === 'string') {
-                            console.log(`📦 Found auction address in auction: ${event.data.auction}`);
                             return event.data.auction;
                         }
 
@@ -206,7 +200,6 @@ export class DutchAuctionHelper {
                         if (typeof event.data.auction === 'object') {
                             for (const [key, value] of Object.entries(event.data.auction)) {
                                 if (typeof value === 'string' && value.startsWith('0x') && value.length === 66) {
-                                    console.log(`📦 Found auction address in auction.${key}: ${value}`);
                                     return value;
                                 }
                             }
@@ -215,8 +208,6 @@ export class DutchAuctionHelper {
                 }
             }
 
-            console.log('⚠️ No DutchAuctionCreatedEvent found in transaction');
-            console.log('📋 Available events:', events);
             return '';
         } catch (error) {
             console.log(`Error extracting auction address: ${error}`);
