@@ -1,9 +1,9 @@
-import { Aptos, Network, AptosConfig, Account, Ed25519PrivateKey } from '@aptos-labs/ts-sdk'
+import { Aptos, Network, AptosConfig, Account, Ed25519PrivateKey, ClientConfig } from '@aptos-labs/ts-sdk'
 
 // Account configuration with environment variables for private keys
 export const ACCOUNTS = {
     FUSION: {
-        address: '0x0e6067afa8c1ca1b0cc486ec2a33ef65c3d8678b67ce9f1e4995fddae63cd25b',
+        address: '0x160df7d8e10750b56b86779cc8f400ad4145fad6cfd1a16dfb532c07302bcf8b',
         privateKey: process.env.APTOS_FUSION_PRIVATE_KEY || 'ed25519-priv-0xb2ff597cbff60622a6984341f91a732399eb2e08cc9e9a29b4621c36eb537cd8',
         name: 'Fusion'
     },
@@ -32,6 +32,13 @@ export const LOCAL_NETWORK_CONFIG = {
 // Network configuration
 export const APTOS_CONFIG = {
     network: Network.TESTNET,
+    // Add caching for better performance
+    clientConfig: {
+        API_KEY: process.env.APTOS_API_KEY || 'aptoslabs_K2CVa5cSJ11_AE5Nfy4iAPR8YWq2cviMshnDsD7AQHeE3'
+        // ,
+        // // Add timeout to prevent hanging
+        // timeout: 30000
+    }
 }
 
 export const MOVEMENT_CONFIG = {
@@ -39,11 +46,16 @@ export const MOVEMENT_CONFIG = {
     restUrl: 'https://full.testnet.movementinfra.xyz/v1',
 }
 
+const clientConfig: ClientConfig = {
+    API_KEY: process.env.APTOS_API_KEY || 'aptoslabs_K2CVa5cSJ11_AE5Nfy4iAPR8YWq2cviMshnDsD7AQHeE3'
+  };
+
 // Helper to create Aptos client
 export function createAptosClient() {
     const aptosConfig = new AptosConfig({
         network: APTOS_CONFIG.network,
-        // fullnode: MOVEMENT_CONFIG.restUrl,
+        // fullnode: MOVEMENT_CONFIG.restUrl,,
+        clientConfig: clientConfig
     });
     return new Aptos(aptosConfig)
 }

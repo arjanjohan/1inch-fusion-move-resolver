@@ -1,6 +1,6 @@
 # Move United - Cross-Chain Atomic Swap Protocol
 
-![Logo](https://github.com/arjanjohan/1inch-fusion-move-contracts/blob/master/assets/logo.png)
+![Logo](https://github.com/arjanjohan/1inch-fusion-move-contracts/blob/master/assets/new_logo.png)
 
 Move United is a comprehensive cross-chain swap protocol that enables secure asset transfers between any EVM and Aptos blockchain. The protocol uses a combination of hashlock/timelock mechanisms and Dutch auctions to ensure atomic cross-chain swaps. This is the Aptos implementation of the [1inch Fusion Plus](https://github.com/1inch/cross-chain-swap) protocol.
 
@@ -100,6 +100,27 @@ export DST_CHAIN_RPC=YOUR_ETH_FORK_URL
 pnpm test
 ```
 
+The outcome should look like this:
+```
+ PASS  tests/main.spec.ts (93.163 s)
+  Resolving example
+    ETH -> APT Fill
+      ✓ should swap Ethereum USDC -> Aptos USDT. Single fill only (14729 ms)
+      ✓ should swap Ethereum USDC -> Aptos USDT. Multiple fills. Fill 100% (14209 ms)
+      ✓ should swap Ethereum USDC -> Aptos USDT. Multiple fills. Fill 50% (13983 ms)
+    APT -> ETH Fill
+      ✓ should swap Aptos USDT -> Ethereum USDC. Single fill only (24903 ms)
+    Cancel
+      ✓ should cancel swap Ethereum USDC -> Aptos USDT (17537 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       5 passed, 5 total
+Snapshots:   0 total
+Time:        93.198 s
+```
+
+Please note the tests will take quite a while, as time manipulation is not possible on Aptos (local) networks.
+
 ## 🧪 Testing
 
 ### Local Accounts
@@ -188,13 +209,13 @@ Besides this, my implementation closely follows the EVM version's architecture, 
 
 - [Deployed smart contracts on Aptos Testnet](https://explorer.aptoslabs.com/account/0x0e6067afa8c1ca1b0cc486ec2a33ef65c3d8678b67ce9f1e4995fddae63cd25b/modules/packages/fusion_plus?network=testnet)
 - [Resolver transactions on Aptos Testnet](https://explorer.aptoslabs.com/account/0x55bb788452c5b9489c13c39a67e3588b068b4ae69141de7d250aa0c6b1160842?network=testnet)
+- [EVM transactions on Tenderly](https://virtual.mainnet.eu.rpc.tenderly.co/7a11fb86-a4e6-4390-8fdd-d5e99903eb5d)
 
 ### Extend Fusion+ to Any Other Chain
-Since Movement uses the same smart contract language, I also deployed the contracts to Movement Network. In [a separate branch](https://github.com/arjanjohan/1inch-fusion-move-contracts/tree/movement) I store the Movement specific `Move.toml` changes.
+Since Movement uses the same smart contract language (although a differnt version), I also deployed the contracts to Movement Network. In [a separate branch](https://github.com/arjanjohan/1inch-fusion-move-contracts/tree/movement) the store the Movement specific `Move.toml` changes and some syntax modifications to work with the older Move 1 language version..
 
 - [Deployed smart contracts on Movement Testnet](https://explorer.movementnetwork.xyz/account/0x0e6067afa8c1ca1b0cc486ec2a33ef65c3d8678b67ce9f1e4995fddae63cd25b/modules/packages/fusion_plus?network=bardock+testnet)
 - [Resolver transactions on Movement Testnet](https://explorer.movementnetwork.xyz/account/0x55bb788452c5b9489c13c39a67e3588b068b4ae69141de7d250aa0c6b1160842?network=bardock+testnet)
-
 
 ## 📚 Documentation
 

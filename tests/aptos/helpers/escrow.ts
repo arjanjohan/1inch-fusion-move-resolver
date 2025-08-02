@@ -16,7 +16,6 @@ export class EscrowHelper {
         fusionOrder: string
     ): Promise<{ txHash: string; escrowAddress: string }> {
         try {
-            console.log('🔧 Creating escrow from fusion order (single fill):', fusionOrder);
             const transaction = await this.client.transaction.build.simple({
                 sender: resolver.accountAddress,
                 data: {
@@ -58,7 +57,6 @@ export class EscrowHelper {
         segment: number
     ): Promise<{ txHash: string; escrowAddress: string }> {
         try {
-            console.log('🔧 Creating escrow from fusion order (partial fill):', fusionOrder, 'segment:', segment);
             const transaction = await this.client.transaction.build.simple({
                 sender: resolver.accountAddress,
                 data: {
@@ -99,10 +97,10 @@ export class EscrowHelper {
         auction: string,
         finality_duration: bigint,
         exclusive_duration: bigint,
+        public_withdrawal_duration: bigint,
         private_cancellation_duration: bigint
     ): Promise<{ txHash: string; escrowAddress: string }> {
         try {
-            console.log('🔧 Creating escrow from auction (single fill):', auction);
             const transaction = await this.client.transaction.build.simple({
                 sender: resolver.accountAddress,
                 data: {
@@ -112,6 +110,7 @@ export class EscrowHelper {
                         auction,
                         finality_duration,
                         exclusive_duration,
+                        public_withdrawal_duration,
                         private_cancellation_duration
                     ]
                 },
@@ -149,10 +148,10 @@ export class EscrowHelper {
         segment: number,
         finality_duration: bigint,
         exclusive_duration: bigint,
+        public_withdrawal_duration: bigint,
         private_cancellation_duration: bigint
     ): Promise<{ txHash: string; escrowAddress: string }> {
         try {
-            console.log('🔧 Creating escrow from auction (partial fill):', auction, 'segment:', segment);
             const transaction = await this.client.transaction.build.simple({
                 sender: resolver.accountAddress,
                 data: {
@@ -163,6 +162,7 @@ export class EscrowHelper {
                         segment,
                         finality_duration,
                         exclusive_duration,
+                        public_withdrawal_duration,
                         private_cancellation_duration
                     ]
                 },
@@ -236,7 +236,6 @@ export class EscrowHelper {
                     functionArguments: [escrowAddress, Array.from(secretBytes)]
                 }
             });
-            console.log('🔍 Secret verification result:', response);
             return response[0];
         } catch (error) {
             console.log(`Error verifying secret: ${error}`);
@@ -251,7 +250,6 @@ export class EscrowHelper {
         secret: string | Uint8Array
     ): Promise<string> {
         try {
-            console.log('💰 Withdrawing from escrow:', escrowAddress);
 
             // Convert secret to bytes if it's a string
             let secretBytes: Uint8Array;
@@ -295,7 +293,6 @@ export class EscrowHelper {
         escrowAddress: string
     ): Promise<string> {
         try {
-            console.log('❌ Cancelling escrow:', escrowAddress);
 
             const transaction = await this.client.transaction.build.simple({
                 sender: resolver.accountAddress,
@@ -359,8 +356,6 @@ export class EscrowHelper {
                 }
             }
 
-            console.log('⚠️ No EscrowCreatedEvent found in transaction');
-            console.log('📋 Available events:', events);
             return '';
         } catch (error) {
             console.log(`Error extracting escrow address: ${error}`);

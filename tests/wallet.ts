@@ -31,6 +31,12 @@ export class Wallet {
         return tokenContract.balanceOf(await this.getAddress())
     }
 
+    async tokenBalanceOf(token: string, address: string): Promise<bigint> {
+        const tokenContract = new Contract(token.toString(), ERC20.abi, this.provider)
+
+        return tokenContract.balanceOf(address)
+    }
+
     async topUpFromDonor(token: string, donor: string, amount: bigint): Promise<void> {
         const donorWallet = await Wallet.fromAddress(donor, this.provider)
         await donorWallet.transferToken(token, await this.getAddress(), amount)
