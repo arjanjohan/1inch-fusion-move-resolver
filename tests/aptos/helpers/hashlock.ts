@@ -27,7 +27,6 @@ export class HashlockHelper {
                     functionArguments: [Array.from(secretBytes)]
                 }
             });
-            console.log('AVH HASH_RAW =', response)
             return response[0];
         } catch (error) {
             console.log(`Error creating hash from secret: ${error}`);

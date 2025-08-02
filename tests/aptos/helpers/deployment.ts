@@ -24,8 +24,6 @@ export class DeploymentHelper {
                     functionArguments: []
                 }
             });
-            console.log('✅ Fusion contracts are already deployed')
-            console.log('🔍 Safety deposit amount:', response[0])
             return true
         } catch (error) {
             console.log('❌ Fusion contracts not deployed')
@@ -45,8 +43,6 @@ export class DeploymentHelper {
                     functionArguments: []
                 }
             });
-            console.log('✅ USDT contract is already deployed')
-            console.log('🔍 USDT metadata:', response[0])
             return true
         } catch (error) {
             console.log('❌ USDT contract not deployed')
@@ -57,14 +53,12 @@ export class DeploymentHelper {
 
     // Deploy Fusion contracts
     async deployFusion(): Promise<void> {
-        console.log('🚀 Deploying Fusion contracts...')
         try {
             const projectRoot = join(this.__dirname, '../../..')
             execSync('bash scripts/deploy-fusion.sh', {
                 cwd: projectRoot,
                 stdio: 'inherit'
             })
-            console.log('✅ Fusion contracts deployed successfully')
         } catch (error) {
             console.error('❌ Failed to deploy Fusion contracts:', error)
             throw error
@@ -73,14 +67,12 @@ export class DeploymentHelper {
 
     // Deploy USDT contract
     async deployUsdt(): Promise<void> {
-        console.log('🚀 Deploying USDT contract...')
         try {
             const projectRoot = join(this.__dirname, '../../..')
             execSync('bash scripts/deploy-usdt-local.sh', {
                 cwd: projectRoot,
                 stdio: 'inherit'
             })
-            console.log('✅ USDT contract deployed successfully')
         } catch (error) {
             console.error('❌ Failed to deploy USDT contract:', error)
             throw error
@@ -89,10 +81,6 @@ export class DeploymentHelper {
 
     // Check and deploy all contracts if needed
     async ensureContractsDeployed(): Promise<void> {
-        console.log('🔍 Checking contract deployment status...')
-        console.log('🔍 Fusion address:', ACCOUNTS.FUSION.address)
-        console.log('🔍 USDT address:', ACCOUNTS.USDT.address)
-
         const [fusionDeployed, usdtDeployed] = await Promise.all([
             this.isFusionDeployed(),
             this.isUsdtDeployed()
@@ -109,11 +97,7 @@ export class DeploymentHelper {
         }
 
         if (deployments.length > 0) {
-            console.log(`📦 Deploying ${deployments.length} contract(s)...`)
             await Promise.all(deployments)
-            console.log('✅ All contracts deployed successfully')
-        } else {
-            console.log('✅ All contracts are already deployed')
         }
     }
 }
