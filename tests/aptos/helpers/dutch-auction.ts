@@ -21,7 +21,8 @@ export class DutchAuctionHelper {
         auction_start_time: bigint,
         auction_end_time: bigint,
         decay_duration: bigint,
-        safety_deposit_amount: bigint
+        safety_deposit_amount: bigint,
+        resolver_whitelist: string[]
     ): Promise<{ txHash: string; auctionAddress: string }> {
         try {
             console.log('🔧 Creating Dutch auction with order_hash:', order_hash);
@@ -36,7 +37,8 @@ export class DutchAuctionHelper {
                 auction_start_time,
                 auction_end_time,
                 decay_duration,
-                safety_deposit_amount
+                safety_deposit_amount,
+                resolver_whitelist
             ];
 
             const transaction = await this.client.transaction.build.simple({

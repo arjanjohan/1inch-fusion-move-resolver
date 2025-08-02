@@ -21,6 +21,7 @@ export class FusionOrderHelper {
         safety_deposit_amount: bigint,
         finality_duration: bigint,
         exclusive_duration: bigint,
+        public_withdrawal_duration: bigint,
         private_cancellation_duration: bigint,
         auto_cancel_after?: bigint
     ): Promise<{ txHash: string; orderAddress: string }> {
@@ -37,6 +38,7 @@ export class FusionOrderHelper {
                 resolver_whitelist,
                 finality_duration,
                 exclusive_duration,
+                public_withdrawal_duration,
                 private_cancellation_duration,
                 auto_cancel_after ? [auto_cancel_after] : undefined
             ];

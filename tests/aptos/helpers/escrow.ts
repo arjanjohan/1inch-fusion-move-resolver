@@ -99,6 +99,7 @@ export class EscrowHelper {
         auction: string,
         finality_duration: bigint,
         exclusive_duration: bigint,
+        public_withdrawal_duration: bigint,
         private_cancellation_duration: bigint
     ): Promise<{ txHash: string; escrowAddress: string }> {
         try {
@@ -112,6 +113,7 @@ export class EscrowHelper {
                         auction,
                         finality_duration,
                         exclusive_duration,
+                        public_withdrawal_duration,
                         private_cancellation_duration
                     ]
                 },
@@ -149,6 +151,7 @@ export class EscrowHelper {
         segment: number,
         finality_duration: bigint,
         exclusive_duration: bigint,
+        public_withdrawal_duration: bigint,
         private_cancellation_duration: bigint
     ): Promise<{ txHash: string; escrowAddress: string }> {
         try {
@@ -163,6 +166,7 @@ export class EscrowHelper {
                         segment,
                         finality_duration,
                         exclusive_duration,
+                        public_withdrawal_duration,
                         private_cancellation_duration
                     ]
                 },
