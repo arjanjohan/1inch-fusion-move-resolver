@@ -118,7 +118,6 @@ describe('Resolving example', () => {
             MaxUint256
         )
         console.log(`✅ USDC approved in ${Date.now() - approveStartTime}ms`)
-
         console.log('🏗️  Setting up resolver contract...')
         const resolverStartTime = Date.now()
         evmResolverContract = await Wallet.fromAddress(evm.resolver, evm.provider)
@@ -235,6 +234,10 @@ describe('Resolving example', () => {
                 config.chain.evm.tokens.USDC.address,
                 config.chain.evm.tokens.USDC.address
             )
+
+            // Get initial Aptos balances
+            const initialAptosUserBalance = await fungibleHelper.getBalance(aptosUserAccount.accountAddress.toString(), usdtMetadata)
+            const initialAptosResolverBalance = await fungibleHelper.getBalance(aptosResolverAccount.accountAddress.toString(), usdtMetadata)
 
             // Create secret for cross-chain swap
             const secret = uint8ArrayToHex(randomBytes(32)) // note: use crypto secure random number in real world
@@ -419,6 +422,15 @@ describe('Resolving example', () => {
             // Verify that the user transferred funds to resolver on ETH
             expect(initialBalances.evm.user - resultBalances.evm.user).toBe(sdkOrder.makingAmount)
             expect(resultBalances.evm.resolver - initialBalances.evm.resolver).toBe(sdkOrder.makingAmount)
+
+            // Verify Aptos balances
+            const finalAptosUserBalance = await fungibleHelper.getBalance(aptosUserAccount.accountAddress.toString(), usdtMetadata)
+            const finalAptosResolverBalance = await fungibleHelper.getBalance(aptosResolverAccount.accountAddress.toString(), usdtMetadata)
+
+            // Verify that the resolver received USDT on Aptos (amount should match the swap)
+            expect(initialAptosResolverBalance - finalAptosResolverBalance).toBe(BigInt(sdkOrder.takingAmount))
+            // Verify that the user's USDT balance decreased (they paid for the swap)
+            expect(finalAptosUserBalance - initialAptosUserBalance).toBe(BigInt(sdkOrder.takingAmount))
         })
 
         it('should swap Ethereum USDC -> Aptos USDT. Multiple fills. Fill 100%', async () => {
@@ -426,6 +438,10 @@ describe('Resolving example', () => {
                 config.chain.evm.tokens.USDC.address,
                 config.chain.evm.tokens.USDC.address
             )
+
+            // Get initial Aptos balances
+            const initialAptosUserBalance = await fungibleHelper.getBalance(aptosUserAccount.accountAddress.toString(), usdtMetadata)
+            const initialAptosResolverBalance = await fungibleHelper.getBalance(aptosResolverAccount.accountAddress.toString(), usdtMetadata)
 
             // Create secret for cross-chain swap
             const secrets = Array.from({length: 11}).map(() => uint8ArrayToHex(randomBytes(32))) // note: use crypto secure random number in the real world
@@ -621,6 +637,15 @@ describe('Resolving example', () => {
             // Verify that the user transferred funds to resolver on ETH
             expect(initialBalances.evm.user - resultBalances.evm.user).toBe(sdkOrder.makingAmount)
             expect(resultBalances.evm.resolver - initialBalances.evm.resolver).toBe(sdkOrder.makingAmount)
+
+            // Verify Aptos balances
+            const finalAptosUserBalance = await fungibleHelper.getBalance(aptosUserAccount.accountAddress.toString(), usdtMetadata)
+            const finalAptosResolverBalance = await fungibleHelper.getBalance(aptosResolverAccount.accountAddress.toString(), usdtMetadata)
+
+            // Verify that the resolver received USDT on Aptos (amount should match the swap)
+            expect(initialAptosResolverBalance - finalAptosResolverBalance).toBe(BigInt(sdkOrder.takingAmount))
+            // Verify that the user's USDT balance decreased (they paid for the swap)
+            expect(finalAptosUserBalance - initialAptosUserBalance).toBe(BigInt(sdkOrder.takingAmount))
         })
 
         it('should swap Ethereum USDC -> Aptos USDT. Multiple fills. Fill 50%', async () => {
@@ -628,6 +653,10 @@ describe('Resolving example', () => {
                 config.chain.evm.tokens.USDC.address,
                 config.chain.evm.tokens.USDC.address
             )
+
+            // Get initial Aptos balances
+            const initialAptosUserBalance = await fungibleHelper.getBalance(aptosUserAccount.accountAddress.toString(), usdtMetadata)
+            const initialAptosResolverBalance = await fungibleHelper.getBalance(aptosResolverAccount.accountAddress.toString(), usdtMetadata)
 
             // Create secret for cross-chain swap
             const secrets = Array.from({length: 11}).map(() => uint8ArrayToHex(randomBytes(32))) // note: use crypto secure random number in the real world
@@ -825,6 +854,15 @@ describe('Resolving example', () => {
             // Verify that the user transferred funds to resolver on ETH (50% fill)
             expect(initialBalances.evm.user - resultBalances.evm.user).toBe(fillAmount)
             expect(resultBalances.evm.resolver - initialBalances.evm.resolver).toBe(fillAmount)
+
+            // Verify Aptos balances
+            const finalAptosUserBalance = await fungibleHelper.getBalance(aptosUserAccount.accountAddress.toString(), usdtMetadata)
+            const finalAptosResolverBalance = await fungibleHelper.getBalance(aptosResolverAccount.accountAddress.toString(), usdtMetadata)
+
+            // Verify that the resolver received USDT on Aptos (amount should match the swap)
+            expect(initialAptosResolverBalance - finalAptosResolverBalance).toBe(BigInt(sdkOrder.takingAmount / 2n))
+            // Verify that the user's USDT balance decreased (they paid for the swap)
+            expect(finalAptosUserBalance - initialAptosUserBalance).toBe(BigInt(sdkOrder.takingAmount / 2n))
         })
 
     })
@@ -1042,10 +1080,10 @@ describe('Resolving example', () => {
             const finalAptosUserBalance = await fungibleHelper.getBalance(aptosUserAccount.accountAddress.toString(), usdtMetadata)
             const finalAptosResolverBalance = await fungibleHelper.getBalance(aptosResolverAccount.accountAddress.toString(), usdtMetadata)
 
-            // Verify that the user received USDT on Aptos (amount should match the swap)
-            expect(initialAptosUserBalance - finalAptosUserBalance).toBe(BigInt(99_000_000)) // 99 USDT (6 decimals)
-            // Verify that the resolver's USDT balance decreased (they paid for the swap)
-            expect(finalAptosResolverBalance - initialAptosResolverBalance).toBe(BigInt(99_000_000)) // 99 USDT (6 decimals)
+            // Verify that the resolver received USDT on Aptos (amount should match the swap)
+            expect(finalAptosResolverBalance - initialAptosResolverBalance).toBe(BigInt(sdkOrder.makingAmount))
+            // Verify that the user's USDT balance decreased (they paid for the swap)
+            expect(initialAptosUserBalance - finalAptosUserBalance).toBe(BigInt(sdkOrder.makingAmount))
         })
 
     })
