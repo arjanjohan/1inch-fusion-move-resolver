@@ -398,6 +398,214 @@ describe('Resolving example', () => {
             expect(finalAptosUserBalance - initialAptosUserBalance).toBe(BigInt(sdkOrder.takingAmount))
         })
 
+        it('should swap Ethereum USDC -> Aptos USDT. Single fill after decreased', async () => {
+            const initialBalances = await getBalances(
+                config.chain.evm.tokens.USDC.address,
+                config.chain.evm.tokens.USDC.address
+            )
+
+            // Get initial Aptos balances
+            const initialAptosUserBalance = await fungibleHelper.getBalance(aptosUserAccount.accountAddress.toString(), usdtMetadata)
+            const initialAptosResolverBalance = await fungibleHelper.getBalance(aptosResolverAccount.accountAddress.toString(), usdtMetadata)
+
+            // Create secret for cross-chain swap
+            const secret = uint8ArrayToHex(randomBytes(32)) // note: use crypto secure random number in real world
+            const secretBytes = new Uint8Array(Buffer.from(secret.startsWith('0x') ? secret.slice(2) : secret, 'hex'))
+
+            // Create hash from secret for Aptos
+            const secretHash = await hashlockHelper.createHashFromSecret(secretBytes)
+            const secretHashBytes = new Uint8Array(Buffer.from(secretHash.startsWith('0x') ? secretHash.slice(2) : secretHash, 'hex'))
+
+            // Create SDK order for ETH side with real source chain values and dummy destination values
+            const sdkOrder = Sdk.CrossChainOrder.new(
+                new Address(evm.escrowFactory), // Real ETH escrow factory
+                {
+                    salt: Sdk.randBigInt(1000n),
+                    maker: new Address(await evmChainUser.getAddress()), // Real ETH maker
+                    makingAmount: parseUnits('100', 6), // 100 USDC (6 decimals)
+                    takingAmount: parseUnits('99', 6), // 99 USDT (6 decimals)
+                    makerAsset: new Address(config.chain.evm.tokens.USDC.address), // Real ETH USDC
+                    takerAsset: new Address('0x0000000000000000000000000000000000000000') // Dummy APT USDT
+                },
+                {
+                    hashLock: Sdk.HashLock.forSingleFill(secret),
+                    timeLocks: Sdk.TimeLocks.new({
+                        srcWithdrawal: 10n, // 10sec finality lock for test
+                        srcPublicWithdrawal: 120n, // 2m for private withdrawal
+                        srcCancellation: 121n, // 1sec public withdrawal
+                        srcPublicCancellation: 122n, // 1sec private cancellation
+                        dstWithdrawal: 10n, // 10sec finality lock for test
+                        dstPublicWithdrawal: 100n, // 100sec private withdrawal
+                        dstCancellation: 101n // 1sec public withdrawal
+                    }),
+                    srcChainId, // Real ETH chain ID
+                    dstChainId: aptosChainId, // Dummy APT chain ID
+                    srcSafetyDeposit: parseEther('0.001'), // Real ETH safety deposit
+                    dstSafetyDeposit: parseEther('0.001') // Dummy APT safety deposit
+                },
+                {
+                    auction: new Sdk.AuctionDetails({
+                        initialRateBump: 0,
+                        points: [],
+                        duration: 120n,
+                        startTime: srcTimestamp
+                    }),
+                    whitelist: [
+                        {
+                            address: new Address(evm.resolver), // Real ETH resolver
+                            allowFrom: 0n
+                        }
+                    ],
+                    resolvingStartTime: 0n
+                },
+                {
+                    nonce: Sdk.randBigInt(UINT_40_MAX),
+                    allowPartialFills: false,
+                    allowMultipleFills: false
+                }
+            )
+
+            // Create signature for SDK order
+            const signature = await evmChainUser.signOrder(srcChainId, sdkOrder)
+            const orderHash = sdkOrder.getOrderHash(srcChainId)
+
+
+            // Create Dutch auction on Aptos (destination chain) - USER creates this
+            console.log('📝 Creating Dutch auction on Aptos...')
+            const order_hash = new Uint8Array(Buffer.from('order_hash_123', 'utf8'))
+            const hashes = [secretHashBytes] // Single hash for full fill
+            const makerAsset = usdtMetadata // USDT metadata address
+            const makerAmount = BigInt(99_000_000) // 99 USDT (6 decimals)
+            const resolver_whitelist = [APTOS_ACCOUNTS.RESOLVER.address] // Only this resolver can fill
+            const safety_deposit_amount = BigInt(10_000) // 0.0001 APT (8 decimals)
+            const finality_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
+            const exclusive_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
+            const public_withdrawal_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
+            const private_cancellation_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
+            const starting_amount = BigInt(99_000_000) // Starting amount (99 USDT)
+            const ending_amount = BigInt(49_500_000) // Ending amount (49.5 USDT)
+            const auction_start_time = BigInt(Math.floor(Date.now() / 1000)) // Current time
+            const decay_duration = BigInt(5) // 5 seconds decay
+            const auction_end_time = auction_start_time + decay_duration + BigInt(60) // End time after decay duration
+
+            const auctionResult = await dutchAuctionHelper.createAuction(
+                aptosUserAccount, // USER creates the auction
+                order_hash,
+                hashes,
+                makerAsset, // metadata
+                starting_amount,
+                ending_amount,
+                auction_start_time,
+                auction_end_time,
+                decay_duration,
+                safety_deposit_amount,
+                [APTOS_ACCOUNTS.RESOLVER.address] // resolver whitelist
+            );
+
+            console.log(`✅ Dutch auction created! Auction address: ${auctionResult.auctionAddress}`)
+            expect(auctionResult.auctionAddress).toBeDefined()
+            expect(auctionResult.auctionAddress).not.toBe('')
+
+            // Wait for the auction price to drop
+            // Since we are testing on mainnet, ensure decay is 100% complete to accuratly predict the outcome
+            await increaseTime(6)
+
+            // RESOLVER fills the Dutch auction
+            console.log('🔒 Creating escrow from Dutch auction...')
+            const escrowResult = await escrowHelper.createEscrowFromAuctionSingleFill(
+                aptosResolverAccount, // RESOLVER fills the auction
+                auctionResult.auctionAddress,
+                finality_duration,
+                exclusive_duration,
+                public_withdrawal_duration,
+                private_cancellation_duration
+            );
+
+            console.log(`✅ Escrow created! Escrow address: ${escrowResult.escrowAddress}`)
+            expect(escrowResult.escrowAddress).toBeDefined()
+            expect(escrowResult.escrowAddress).not.toBe('')
+
+
+            // Resolver fills order on source chain (ETH)
+            const resolverContract = new Resolver(evm.resolver, evm.resolver)
+
+            console.log(`[ETH]`, `Filling order ${orderHash} on ETH`)
+
+            const fillAmount = sdkOrder.makingAmount
+            const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmChainResolver.send(
+                resolverContract.deploySrc(
+                    srcChainId,
+                    sdkOrder,
+                    signature,
+                    Sdk.TakerTraits.default()
+                        .setExtension(sdkOrder.extension)
+                        .setAmountMode(Sdk.AmountMode.maker)
+                        .setAmountThreshold(sdkOrder.takingAmount),
+                    fillAmount
+                )
+            )
+
+            console.log(`[ETH]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
+
+            const srcEscrowEvent = await evmFactory.getSrcDeployEvent(srcDeployBlock)
+
+            const dstImmutables = srcEscrowEvent[0]
+                .withComplement(srcEscrowEvent[1])
+                .withTaker(new Address(resolverContract.dstAddress))
+
+            const ESCROW_SRC_IMPLEMENTATION = await evmFactory.getSourceImpl()
+
+            const srcEscrowAddress = new Sdk.EscrowFactory(new Address(evm.escrowFactory)).getSrcEscrowAddress(
+                srcEscrowEvent[0],
+                ESCROW_SRC_IMPLEMENTATION
+            )
+
+            // Wait for the escrow to be processed (10 seconds to match finality_duration)
+            await increaseTime(11)
+
+            // Withdraw from Aptos escrow using the secret
+            console.log('💰 Withdrawing from Aptos escrow...')
+            const aptosWithdrawTxHash = await escrowHelper.withdrawFromEscrow(
+                aptosResolverAccount,
+                escrowResult.escrowAddress,
+                secret
+            );
+
+            console.log(`✅ Aptos withdrawal successful! Transaction: ${aptosWithdrawTxHash}`)
+            expect(aptosWithdrawTxHash).toBeDefined()
+
+            // Withdraw from ETH escrow using the secret
+            console.log(`[ETH]`, `Withdrawing funds for resolver from ETH escrow`)
+            const {txHash: resolverWithdrawHash} = await evmChainResolver.send(
+                resolverContract.withdraw('src', srcEscrowAddress, secret, srcEscrowEvent[0])
+            )
+            console.log(
+                `[ETH]`,
+                `Withdrew funds for resolver from ETH escrow to ${evm.resolver} in tx ${resolverWithdrawHash}`
+            )
+
+            const resultBalances = await getBalances(
+                config.chain.evm.tokens.USDC.address,
+                config.chain.evm.tokens.USDC.address
+            )
+
+            // Verify the cross-chain swap worked
+            console.log('🎉 Complete ETH → APT swap flow test completed!')
+
+            // Verify that the user transferred funds to resolver on ETH
+            expect(initialBalances.evm.user - resultBalances.evm.user).toBe(sdkOrder.makingAmount)
+            expect(resultBalances.evm.resolver - initialBalances.evm.resolver).toBe(sdkOrder.makingAmount)
+
+            // Verify Aptos balances
+            const finalAptosUserBalance = await fungibleHelper.getBalance(aptosUserAccount.accountAddress.toString(), usdtMetadata)
+            const finalAptosResolverBalance = await fungibleHelper.getBalance(aptosResolverAccount.accountAddress.toString(), usdtMetadata)
+
+            // Verify that the resolver received USDT on Aptos (amount should match the swap)
+            expect(initialAptosResolverBalance - finalAptosResolverBalance).toBe(BigInt(ending_amount))
+            // Verify that the user's USDT balance decreased (they paid for the swap)
+            expect(finalAptosUserBalance - initialAptosUserBalance).toBe(BigInt(ending_amount))
+        })
+
         it('should swap Ethereum USDC -> Aptos USDT. Multiple fills. Fill 100%', async () => {
             const initialBalances = await getBalances(
                 config.chain.evm.tokens.USDC.address,
@@ -676,23 +884,16 @@ describe('Resolving example', () => {
                 }
             )
 
-            // Create signature for SDK order
-            const signature = await evmChainUser.signOrder(srcChainId, sdkOrder)
-            const orderHash = sdkOrder.getOrderHash(srcChainId)
 
-            const fillAmount = sdkOrder.makingAmount / 2n
-            const idx = Number((BigInt(secrets.length - 1) * (fillAmount - 1n)) / sdkOrder.makingAmount)
-
-            // Create hash from secret for Aptos
-            const secretHash = secretHashes[idx]
-            const secretHashBytes = new Uint8Array(Buffer.from(secretHash.startsWith('0x') ? secretHash.slice(2) : secretHash, 'hex'))
-
-
+            // Create hash bytes for each secret hash
+            const secretHashesBytes = secretHashes.map(hash =>
+                new Uint8Array(Buffer.from(hash.startsWith('0x') ? hash.slice(2) : hash, 'hex'))
+            )
 
             // Create Dutch auction on Aptos (destination chain) - USER creates this - 50% of the amount
             console.log('📝 Creating Dutch auction on Aptos...')
             const order_hash = new Uint8Array(Buffer.from('order_hash_123', 'utf8'))
-            const hashes = [secretHashBytes] // Single hash for partial fill
+            const hashes = secretHashesBytes // Multiple hashes for partial fills
             const makerAsset = usdtMetadata // USDT metadata address
             const resolver_whitelist = [APTOS_ACCOUNTS.RESOLVER.address] // Only this resolver can fill
             const safety_deposit_amount = BigInt(10_000) // 0.0001 APT (8 decimals)
@@ -700,8 +901,8 @@ describe('Resolving example', () => {
             const exclusive_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
             const public_withdrawal_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
             const private_cancellation_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const starting_amount = BigInt(49_500_000) // Starting amount (49.5 USDT - 50% of 99 USDT)
-            const ending_amount = BigInt(24_750_000) // Ending amount (24.75 USDT - 50% of 49.5 USDT)
+            const starting_amount = BigInt(99_000_000) // Starting amount (99 USDT)
+            const ending_amount = BigInt(49_500_000) // Ending amount (49.5 USDT)
             const auction_start_time = BigInt(Math.floor(Date.now() / 1000)) // Current time
             const decay_duration = BigInt(120) // 2 minutes decay
             const auction_end_time = auction_start_time + decay_duration + BigInt(60) // End time after decay duration
@@ -724,11 +925,15 @@ describe('Resolving example', () => {
             expect(auctionResult.auctionAddress).toBeDefined()
             expect(auctionResult.auctionAddress).not.toBe('')
 
+            const fillAmount = sdkOrder.makingAmount / 2n
+            const idx = Number((BigInt(secrets.length - 1) * (fillAmount - 1n)) / sdkOrder.makingAmount)
+
             // RESOLVER fills the Dutch auction
             console.log('🔒 Creating escrow from Dutch auction...')
-            const escrowResult = await escrowHelper.createEscrowFromAuctionSingleFill(
+            const escrowResult = await escrowHelper.createEscrowFromAuctionPartialFill(
                 aptosResolverAccount, // RESOLVER fills the auction
                 auctionResult.auctionAddress,
+                idx,
                 finality_duration,
                 exclusive_duration,
                 public_withdrawal_duration,
@@ -739,9 +944,13 @@ describe('Resolving example', () => {
             expect(escrowResult.escrowAddress).toBeDefined()
             expect(escrowResult.escrowAddress).not.toBe('')
 
-
             // Resolver fills order on source chain (ETH) - 50% fill
             const resolverContract = new Resolver(evm.resolver, evm.resolver)
+
+            // Create signature for SDK order
+            const signature = await evmChainUser.signOrder(srcChainId, sdkOrder)
+            const orderHash = sdkOrder.getOrderHash(srcChainId)
+
 
             console.log(`[ETH]`, `Filling order ${orderHash} on ETH with 50% fill`)
 
@@ -1046,6 +1255,7 @@ describe('Resolving example', () => {
             // Verify that the user's USDT balance decreased (they paid for the swap)
             expect(initialAptosUserBalance - finalAptosUserBalance).toBe(BigInt(sdkOrder.makingAmount))
         })
+
 
     })
 

@@ -4,12 +4,14 @@
 
 Move United is a comprehensive cross-chain swap protocol that enables secure asset transfers between any EVM and Aptos blockchain. The protocol uses a combination of hashlock/timelock mechanisms and Dutch auctions to ensure atomic cross-chain swaps. This is the Aptos implementation of the [1inch Fusion Plus](https://github.com/1inch/cross-chain-swap) protocol.
 
+For the Aptos Move smart contracts, please see the [1inch-fusion-move-contracts](https://github.com/arjanjohan/1inch-fusion-move-contracts) repo.
+
 ## 🏗️ Project Overview
 
 This project implements the [1inch Fusion Plus](https://github.com/1inch/cross-chain-swap) protocol for Aptos, extending cross-chain swap capabilities to the Move ecosystem. The protocol consists of:
 
-- **Ethereum Smart Contracts**: EscrowFactory and Resolver contracts for source chain operations
-- **Aptos Move Modules**: Dutch auctions, fusion orders, escrow, hashlock, and timelock modules
+- **Existing Ethereum Smart Contracts**: EscrowFactory and Resolver contracts for source chain operations
+- **New Aptos Move Modules**: Dutch auctions, fusion orders, escrow, hashlock, and timelock modules
 - **Integration Tests**: End-to-end cross-chain swap testing between Ethereum and Aptos
 
 ## 🚀 Quick Start
