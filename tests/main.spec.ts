@@ -83,6 +83,7 @@ describe('Resolving example', () => {
     async function increaseTime(t: number): Promise<void> {
         // await Promise.all([src, dst].map((chain) => chain.provider.send('evm_increaseTime', [t])))
         // For Aptos, we need to actually wait since we can't modify time
+        console.log(`🕒 Increasing time by ${t} seconds`)
         await new Promise(resolve => setTimeout(resolve, t * 1000))
     }
 
@@ -137,7 +138,7 @@ describe('Resolving example', () => {
         aptosResolverAccount = createAccount(APTOS_ACCOUNTS.RESOLVER.privateKey)
 
         const network = aptosClient.config.network
-        console.log(`🌐 Aptos network: ${network}`)
+        // console.log(`🌐 Aptos network: ${network}`)
 
         if (network === 'local') {
             console.log('🔧 Fauceting APT to Aptos accounts...')
@@ -153,9 +154,9 @@ describe('Resolving example', () => {
             console.log(`✅ APT fauceted in ${Date.now() - faucetStartTime}ms`)
         }
 
-        console.log('🔧 Migrating APT to FungibleStore...')
-        await fungibleHelper.migrateAptosCoinToFungibleStore(aptosUserAccount)
-        await fungibleHelper.migrateAptosCoinToFungibleStore(aptosResolverAccount)
+        // console.log('🔧 Migrating APT to FungibleStore...')
+        // await fungibleHelper.migrateAptosCoinToFungibleStore(aptosUserAccount)
+        // await fungibleHelper.migrateAptosCoinToFungibleStore(aptosResolverAccount)
 
         const usdtAccount = createAccount(APTOS_ACCOUNTS.USDT.privateKey)
         await fungibleHelper.faucetToAddress(
@@ -170,7 +171,7 @@ describe('Resolving example', () => {
             BigInt(100_000_000) // 1000 USDT
         );
 
-        console.log(`🎉 beforeAll completed in ${Date.now() - startTime}ms`)
+        // console.log(`🎉 beforeAll completed in ${Date.now() - startTime}ms`)
     })
 
     async function getBalances(
@@ -304,6 +305,7 @@ describe('Resolving example', () => {
 
             // RESOLVER fills the Dutch auction
             console.log('🔒 Creating escrow from Dutch auction...')
+            console.log(`   - Resolver paying: ${Number(ending_amount) / 1_000_000} USDT`)
             const escrowResult = await escrowHelper.createEscrowFromAuctionSingleFill(
                 aptosResolverAccount, // RESOLVER fills the auction
                 auctionResult.auctionAddress,
@@ -396,6 +398,11 @@ describe('Resolving example', () => {
             expect(initialAptosResolverBalance - finalAptosResolverBalance).toBe(BigInt(sdkOrder.takingAmount))
             // Verify that the user's USDT balance decreased (they paid for the swap)
             expect(finalAptosUserBalance - initialAptosUserBalance).toBe(BigInt(sdkOrder.takingAmount))
+
+            // Log the final amounts for clarity
+            console.log(`💰 Final amounts:`)
+            console.log(`   - Resolver received: ${Number(sdkOrder.makingAmount) / 1_000_000} USDC on Ethereum`)
+            console.log(`   - User received: ${Number(finalAptosUserBalance - initialAptosUserBalance) / 1_000_000} USDT on Aptos`)
         })
 
         it('should swap Ethereum USDC -> Aptos USDT. Single fill after decreased', async () => {
@@ -423,7 +430,7 @@ describe('Resolving example', () => {
                     salt: Sdk.randBigInt(1000n),
                     maker: new Address(await evmChainUser.getAddress()), // Real ETH maker
                     makingAmount: parseUnits('100', 6), // 100 USDC (6 decimals)
-                    takingAmount: parseUnits('99', 6), // 99 USDT (6 decimals)
+                    takingAmount: parseUnits('100', 6), // 100 USDT (6 decimals)
                     makerAsset: new Address(config.chain.evm.tokens.USDC.address), // Real ETH USDC
                     takerAsset: new Address('0x0000000000000000000000000000000000000000') // Dummy APT USDT
                 },
@@ -482,8 +489,8 @@ describe('Resolving example', () => {
             const exclusive_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
             const public_withdrawal_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
             const private_cancellation_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const starting_amount = BigInt(99_000_000) // Starting amount (99 USDT)
-            const ending_amount = BigInt(49_500_000) // Ending amount (49.5 USDT)
+            const starting_amount = BigInt(100_000_000) // Starting amount (100 USDT)
+            const ending_amount = BigInt(99_000_000) // Ending amount (99 USDT)
             const auction_start_time = BigInt(Math.floor(Date.now() / 1000)) // Current time
             const decay_duration = BigInt(5) // 5 seconds decay
             const auction_end_time = auction_start_time + decay_duration + BigInt(60) // End time after decay duration
@@ -508,10 +515,14 @@ describe('Resolving example', () => {
 
             // Wait for the auction price to drop
             // Since we are testing on mainnet, ensure decay is 100% complete to accuratly predict the outcome
+            console.log(`📉 Auction price before decay: ${Number(starting_amount) / 1_000_000} USDT`)
+            console.log(`📉 Auction price after decay: ${Number(ending_amount) / 1_000_000} USDT`)
+            console.log(`📉 Price decrease: ${Number(starting_amount - ending_amount) / 1_000_000} USDT (${((Number(starting_amount - ending_amount) / Number(starting_amount)) * 100).toFixed(2)}%)`)
             await increaseTime(6)
 
             // RESOLVER fills the Dutch auction
             console.log('🔒 Creating escrow from Dutch auction...')
+            console.log(`   - Resolver paying: ${Number(ending_amount) / 1_000_000} USDT`)
             const escrowResult = await escrowHelper.createEscrowFromAuctionSingleFill(
                 aptosResolverAccount, // RESOLVER fills the auction
                 auctionResult.auctionAddress,
@@ -545,7 +556,8 @@ describe('Resolving example', () => {
                 )
             )
 
-            console.log(`[ETH]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
+            console.log(`[ETH]`, `Creating escrow from order ${orderHash} filled for ${Number(fillAmount) / 1_000_000} USDC in tx ${orderFillHash}`)
+            console.log(`   - User paying: ${Number(fillAmount) / 1_000_000} USDC`)
 
             const srcEscrowEvent = await evmFactory.getSrcDeployEvent(srcDeployBlock)
 
@@ -604,6 +616,12 @@ describe('Resolving example', () => {
             expect(initialAptosResolverBalance - finalAptosResolverBalance).toBe(BigInt(ending_amount))
             // Verify that the user's USDT balance decreased (they paid for the swap)
             expect(finalAptosUserBalance - initialAptosUserBalance).toBe(BigInt(ending_amount))
+
+            // Log the final amounts for clarity
+            console.log(`💰 Final amounts:`)
+            console.log(`   - Resolver received: ${Number(sdkOrder.makingAmount) / 1_000_000} USDC on Ethereum`)
+            console.log(`   - User received: ${Number(finalAptosUserBalance - initialAptosUserBalance) / 1_000_000} USDT on Aptos`)
+            console.log(`   - Price decay saved: ${Number(starting_amount - ending_amount) / 1_000_000} USDT`)
         })
 
         it('should swap Ethereum USDC -> Aptos USDT. Multiple fills. Fill 100%', async () => {
@@ -818,6 +836,11 @@ describe('Resolving example', () => {
             expect(initialAptosResolverBalance - finalAptosResolverBalance).toBe(BigInt(sdkOrder.takingAmount))
             // Verify that the user's USDT balance decreased (they paid for the swap)
             expect(finalAptosUserBalance - initialAptosUserBalance).toBe(BigInt(sdkOrder.takingAmount))
+
+            // Log the final amounts for clarity
+            console.log(`💰 Final amounts:`)
+            console.log(`   - Resolver received: ${Number(sdkOrder.makingAmount) / 1_000_000} USDC on Ethereum`)
+            console.log(`   - User received: ${Number(finalAptosUserBalance - initialAptosUserBalance) / 1_000_000} USDT on Aptos`)
         })
 
         it('should swap Ethereum USDC -> Aptos USDT. Multiple fills. Fill 50%', async () => {
@@ -1134,6 +1157,12 @@ describe('Resolving example', () => {
                 private_cancellation_duration
             );
 
+            console.log(`✅ Fusion order created! Order address: ${fusionOrderResult.orderAddress}`)
+            console.log(`   - User transferring: ${Number(amount) / 1_000_000} USDT`)
+
+            expect(fusionOrderResult.orderAddress).toBeDefined()
+            expect(fusionOrderResult.orderAddress).not.toBe('')
+
             // Resolver fills order on destination chain (ETH)
             const resolverContract = new Resolver(evm.resolver, evm.resolver)
 
@@ -1175,7 +1204,8 @@ describe('Resolving example', () => {
                 .withTaker(new Address(resolverContract.dstAddress))
                 .withDeployedAt(BigInt(currentTime))
 
-            console.log(`[${dstChainId}]`, `Depositing ${dstImmutables.amount} for order ${orderHash}`)
+            console.log(`[${dstChainId}]`, `Creating escrow from order ${orderHash} for ${Number(dstImmutables.amount) / 1_000_000} USDC`)
+            console.log(`   - Resolver paying: ${Number(dstImmutables.amount) / 1_000_000} USDC`)
             const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await evmChainResolver.send(
                 resolverContract.deployDst(dstImmutables)
             )
@@ -1192,19 +1222,10 @@ describe('Resolving example', () => {
                 ESCROW_DST_IMPLEMENTATION
             )
 
-            // Log dst escrow address
-            console.log(`🏦 DST Escrow Address: ${dstEscrowAddress}`)
-
-            // Check balance in dst escrow address
-            const dstEscrowBalance = await evm.provider.getBalance(dstEscrowAddress.toString())
-            console.log(`💰 DST Escrow ETH Balance: ${dstEscrowBalance}`)
-
-            console.log(`✅ Fusion order created! Order address: ${fusionOrderResult.orderAddress}`)
-            expect(fusionOrderResult.orderAddress).toBeDefined()
-            expect(fusionOrderResult.orderAddress).not.toBe('')
 
             // RESOLVER fills the fusion order on Aptos (source chain)
             console.log('🔒 Creating escrow from fusion order on Aptos...')
+            console.log(` Transfer ${Number(amount) / 1_000_000} USDT from FusionOrder to Escrow`)
             const escrowResult = await escrowHelper.createEscrowFromOrderSingleFill(
                 aptosResolverAccount, // RESOLVER fills the fusion order
                 fusionOrderResult.orderAddress
@@ -1254,8 +1275,12 @@ describe('Resolving example', () => {
             expect(finalAptosResolverBalance - initialAptosResolverBalance).toBe(BigInt(sdkOrder.makingAmount))
             // Verify that the user's USDT balance decreased (they paid for the swap)
             expect(initialAptosUserBalance - finalAptosUserBalance).toBe(BigInt(sdkOrder.makingAmount))
-        })
 
+            // Log the final amounts for clarity
+            console.log(`💰 Final amounts:`)
+            console.log(`   - User received: ${Number(sdkOrder.takingAmount) / 1_000_000} USDC on Ethereum`)
+            console.log(`   - Resolver received: ${Number(finalAptosResolverBalance - initialAptosResolverBalance) / 1_000_000} USDT on Aptos`)
+        })
 
     })
 
