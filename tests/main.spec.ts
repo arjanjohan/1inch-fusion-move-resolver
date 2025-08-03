@@ -1,9 +1,9 @@
 import 'dotenv/config'
-import {expect, jest} from '@jest/globals'
+import { expect, jest } from '@jest/globals'
 import { Aptos, Account } from '@aptos-labs/ts-sdk'
 
-import {createServer, CreateServerReturnType} from 'prool'
-import {anvil} from 'prool/instances'
+import { createServer, CreateServerReturnType } from 'prool'
+import { anvil } from 'prool/instances'
 
 import Sdk from '@1inch/cross-chain-sdk'
 import {
@@ -17,12 +17,12 @@ import {
     randomBytes,
     Wallet as SignerWallet
 } from 'ethers'
-import {uint8ArrayToHex, UINT_40_MAX} from '@1inch/byte-utils'
+import { uint8ArrayToHex, UINT_40_MAX } from '@1inch/byte-utils'
 import assert from 'node:assert'
-import {ChainConfig, config} from './config'
-import {Wallet} from './wallet'
-import {Resolver} from './resolver'
-import {EscrowFactory} from './escrow-factory'
+import { ChainConfig, config } from './config'
+import { Wallet } from './wallet'
+import { Resolver } from './resolver'
+import { EscrowFactory } from './escrow-factory'
 import factoryContract from '../dist/contracts/TestEscrowFactory.sol/TestEscrowFactory.json'
 import resolverContract from '../dist/contracts/Resolver.sol/Resolver.json'
 
@@ -36,7 +36,7 @@ import { DutchAuctionHelper } from './aptos/helpers/dutch-auction'
 import { TimelockHelper } from './aptos/helpers/timelock'
 import { DeploymentHelper } from './aptos/helpers/deployment'
 
-const {Address} = Sdk
+const { Address } = Sdk
 
 jest.setTimeout(1000 * 160) // 1 minute
 
@@ -177,7 +177,7 @@ describe('Resolving example', () => {
     async function getBalances(
         evmToken: string,
         dstToken: string
-    ): Promise<{evm: {user: bigint; resolver: bigint}}> {
+    ): Promise<{ evm: { user: bigint; resolver: bigint } }> {
         return {
             evm: {
                 user: await evmChainUser.tokenBalance(evmToken),
@@ -299,7 +299,7 @@ describe('Resolving example', () => {
                 [APTOS_ACCOUNTS.RESOLVER.address] // resolver whitelist
             );
 
-            console.log(`✅ Dutch auction created! Auction address: ${auctionResult.auctionAddress}`)
+            console.log(`[APT]`, `Dutch auction created in tx ${auctionResult.auctionAddress}`)
             expect(auctionResult.auctionAddress).toBeDefined()
             expect(auctionResult.auctionAddress).not.toBe('')
 
@@ -323,10 +323,11 @@ describe('Resolving example', () => {
             // Resolver fills order on source chain (ETH)
             const resolverContract = new Resolver(evm.resolver, evm.resolver)
 
-            console.log(`[ETH]`, `Filling order ${orderHash} on ETH`)
+            console.log(`[ETH]`, `Creating escrow from order ${orderHash} for ${Number(sdkOrder.makingAmount) / 1_000_000} USDC`)
+            console.log(`   - User paying: ${Number(sdkOrder.makingAmount) / 1_000_000} USDC`)
 
             const fillAmount = sdkOrder.makingAmount
-            const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmChainResolver.send(
+            const { txHash: orderFillHash, blockHash: srcDeployBlock } = await evmChainResolver.send(
                 resolverContract.deploySrc(
                     srcChainId,
                     sdkOrder,
@@ -339,7 +340,7 @@ describe('Resolving example', () => {
                 )
             )
 
-            console.log(`[ETH]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
+            console.log(`[ETH]`, `Escrow created in tx ${orderFillHash}`)
 
             const srcEscrowEvent = await evmFactory.getSrcDeployEvent(srcDeployBlock)
 
@@ -358,25 +359,22 @@ describe('Resolving example', () => {
             await increaseTime(11)
 
             // Withdraw from Aptos escrow using the secret
-            console.log('💰 Withdrawing from Aptos escrow...')
+            console.log(`[APT]`, `Withdrawing ${Number(sdkOrder.takingAmount) / 1_000_000} USDT from Aptos escrow`)
             const aptosWithdrawTxHash = await escrowHelper.withdrawFromEscrow(
                 aptosResolverAccount,
                 escrowResult.escrowAddress,
                 secret
             );
 
-            console.log(`✅ Aptos withdrawal successful! Transaction: ${aptosWithdrawTxHash}`)
+            console.log(`[APT]`, `Withdrawal successful in tx ${aptosWithdrawTxHash}`)
             expect(aptosWithdrawTxHash).toBeDefined()
 
             // Withdraw from ETH escrow using the secret
-            console.log(`[ETH]`, `Withdrawing funds for resolver from ETH escrow`)
-            const {txHash: resolverWithdrawHash} = await evmChainResolver.send(
+            console.log(`[ETH]`, `Withdrawing ${Number(sdkOrder.makingAmount) / 1_000_000} USDC from ETH escrow`)
+            const { txHash: resolverWithdrawHash } = await evmChainResolver.send(
                 resolverContract.withdraw('src', srcEscrowAddress, secret, srcEscrowEvent[0])
             )
-            console.log(
-                `[ETH]`,
-                `Withdrew funds for resolver from ETH escrow to ${evm.resolver} in tx ${resolverWithdrawHash}`
-            )
+            console.log(`[ETH]`, `Withdrawal successful in tx ${resolverWithdrawHash}`)
 
             const resultBalances = await getBalances(
                 config.chain.evm.tokens.USDC.address,
@@ -509,7 +507,7 @@ describe('Resolving example', () => {
                 [APTOS_ACCOUNTS.RESOLVER.address] // resolver whitelist
             );
 
-            console.log(`✅ Dutch auction created! Auction address: ${auctionResult.auctionAddress}`)
+            console.log(`[APT]`, `Dutch auction created in tx ${auctionResult.auctionAddress}`)
             expect(auctionResult.auctionAddress).toBeDefined()
             expect(auctionResult.auctionAddress).not.toBe('')
 
@@ -540,10 +538,11 @@ describe('Resolving example', () => {
             // Resolver fills order on source chain (ETH)
             const resolverContract = new Resolver(evm.resolver, evm.resolver)
 
-            console.log(`[ETH]`, `Filling order ${orderHash} on ETH`)
+            console.log(`[ETH]`, `Creating escrow from order ${orderHash} for ${Number(sdkOrder.makingAmount) / 1_000_000} USDC`)
+            console.log(`   - User paying: ${Number(sdkOrder.makingAmount) / 1_000_000} USDC`)
 
             const fillAmount = sdkOrder.makingAmount
-            const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmChainResolver.send(
+            const { txHash: orderFillHash, blockHash: srcDeployBlock } = await evmChainResolver.send(
                 resolverContract.deploySrc(
                     srcChainId,
                     sdkOrder,
@@ -556,8 +555,7 @@ describe('Resolving example', () => {
                 )
             )
 
-            console.log(`[ETH]`, `Creating escrow from order ${orderHash} filled for ${Number(fillAmount) / 1_000_000} USDC in tx ${orderFillHash}`)
-            console.log(`   - User paying: ${Number(fillAmount) / 1_000_000} USDC`)
+            console.log(`[ETH]`, `Escrow created in tx ${orderFillHash}`)
 
             const srcEscrowEvent = await evmFactory.getSrcDeployEvent(srcDeployBlock)
 
@@ -576,25 +574,22 @@ describe('Resolving example', () => {
             await increaseTime(11)
 
             // Withdraw from Aptos escrow using the secret
-            console.log('💰 Withdrawing from Aptos escrow...')
+            console.log(`[APT]`, `Withdrawing ${Number(sdkOrder.takingAmount) / 1_000_000} USDT from Aptos escrow`)
             const aptosWithdrawTxHash = await escrowHelper.withdrawFromEscrow(
-                aptosResolverAccount,
+                aptosResolverAccount, // RESOLVER fills the auction
                 escrowResult.escrowAddress,
                 secret
             );
 
-            console.log(`✅ Aptos withdrawal successful! Transaction: ${aptosWithdrawTxHash}`)
+            console.log(`[APT]`, `Withdrawal successful in tx ${aptosWithdrawTxHash}`)
             expect(aptosWithdrawTxHash).toBeDefined()
 
             // Withdraw from ETH escrow using the secret
-            console.log(`[ETH]`, `Withdrawing funds for resolver from ETH escrow`)
-            const {txHash: resolverWithdrawHash} = await evmChainResolver.send(
+            console.log(`[ETH]`, `Withdrawing ${Number(sdkOrder.makingAmount) / 1_000_000} USDC from ETH escrow`)
+            const { txHash: resolverWithdrawHash } = await evmChainResolver.send(
                 resolverContract.withdraw('src', srcEscrowAddress, secret, srcEscrowEvent[0])
             )
-            console.log(
-                `[ETH]`,
-                `Withdrew funds for resolver from ETH escrow to ${evm.resolver} in tx ${resolverWithdrawHash}`
-            )
+            console.log(`[ETH]`, `Withdrawal successful in tx ${resolverWithdrawHash}`)
 
             const resultBalances = await getBalances(
                 config.chain.evm.tokens.USDC.address,
@@ -635,7 +630,7 @@ describe('Resolving example', () => {
             const initialAptosResolverBalance = await fungibleHelper.getBalance(aptosResolverAccount.accountAddress.toString(), usdtMetadata)
 
             // Create secret for cross-chain swap
-            const secrets = Array.from({length: 11}).map(() => uint8ArrayToHex(randomBytes(32))) // note: use crypto secure random number in the real world
+            const secrets = Array.from({ length: 11 }).map(() => uint8ArrayToHex(randomBytes(32))) // note: use crypto secure random number in the real world
             const secretHashes = secrets.map((s) => Sdk.HashLock.hashSecret(s))
             const leaves = Sdk.HashLock.getMerkleLeaves(secrets)
 
@@ -732,7 +727,7 @@ describe('Resolving example', () => {
                 [APTOS_ACCOUNTS.RESOLVER.address] // resolver whitelist
             );
 
-            console.log(`[APT]`, `✅ Dutch auction created! Auction address: ${auctionResult.auctionAddress}`)
+            console.log(`[APT]`, `Dutch auction created in tx ${auctionResult.auctionAddress}`)
             expect(auctionResult.auctionAddress).toBeDefined()
             expect(auctionResult.auctionAddress).not.toBe('')
 
@@ -751,12 +746,13 @@ describe('Resolving example', () => {
             expect(escrowResult.escrowAddress).toBeDefined()
             expect(escrowResult.escrowAddress).not.toBe('')
 
-            console.log(`[ETH]`, `Filling order ${orderHash} on ETH`)
+            console.log(`[ETH]`, `Creating escrow from order ${orderHash} for ${Number(sdkOrder.makingAmount) / 1_000_000} USDC`)
+            console.log(`   - User paying: ${Number(sdkOrder.makingAmount) / 1_000_000} USDC`)
 
             const fillAmount = sdkOrder.makingAmount
             const idx = secrets.length - 1// last index to fulfill
 
-            const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmChainResolver.send(
+            const { txHash: orderFillHash, blockHash: srcDeployBlock } = await evmChainResolver.send(
                 resolverContract.deploySrc(
                     srcChainId,
                     sdkOrder,
@@ -777,7 +773,7 @@ describe('Resolving example', () => {
                 )
             )
 
-            console.log(`[ETH]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
+            console.log(`[ETH]`, `Escrow created in tx ${orderFillHash}`)
 
             const srcEscrowEvent = await evmFactory.getSrcDeployEvent(srcDeployBlock)
 
@@ -796,25 +792,22 @@ describe('Resolving example', () => {
             await increaseTime(11)
 
             // Withdraw from Aptos escrow using the secret
-            console.log(`[APT]`, '💰 Withdrawing from Aptos escrow...')
+            console.log(`[APT]`, `Withdrawing ${Number(sdkOrder.takingAmount) / 1_000_000} USDT from Aptos escrow`)
             const aptosWithdrawTxHash = await escrowHelper.withdrawFromEscrow(
                 aptosResolverAccount,
                 escrowResult.escrowAddress,
                 secrets[idx]
             );
 
-            console.log(`[APT]`, `✅ Aptos withdrawal successful! Transaction: ${aptosWithdrawTxHash}`)
+            console.log(`[APT]`, `Withdrawal successful in tx ${aptosWithdrawTxHash}`)
             expect(aptosWithdrawTxHash).toBeDefined()
 
             // Withdraw from ETH escrow using the secret
-            console.log(`[ETH]`, `Withdrawing funds for resolver from ETH escrow`)
-            const {txHash: resolverWithdrawHash} = await evmChainResolver.send(
+            console.log(`[ETH]`, `Withdrawing ${Number(sdkOrder.makingAmount) / 1_000_000} USDC from ETH escrow`)
+            const { txHash: resolverWithdrawHash } = await evmChainResolver.send(
                 resolverContract.withdraw('src', srcEscrowAddress, secrets[idx], srcEscrowEvent[0])
             )
-            console.log(
-                `[ETH]`,
-                `Withdrew funds for resolver from ETH escrow to ${evm.resolver} in tx ${resolverWithdrawHash}`
-            )
+            console.log(`[ETH]`, `Withdrawal successful in tx ${resolverWithdrawHash}`)
 
             const resultBalances = await getBalances(
                 config.chain.evm.tokens.USDC.address,
@@ -854,7 +847,7 @@ describe('Resolving example', () => {
             const initialAptosResolverBalance = await fungibleHelper.getBalance(aptosResolverAccount.accountAddress.toString(), usdtMetadata)
 
             // Create secret for cross-chain swap
-            const secrets = Array.from({length: 11}).map(() => uint8ArrayToHex(randomBytes(32))) // note: use crypto secure random number in the real world
+            const secrets = Array.from({ length: 11 }).map(() => uint8ArrayToHex(randomBytes(32))) // note: use crypto secure random number in the real world
             const secretHashes = secrets.map((s) => Sdk.HashLock.hashSecret(s))
             const leaves = Sdk.HashLock.getMerkleLeaves(secrets)
 
@@ -944,7 +937,7 @@ describe('Resolving example', () => {
                 [APTOS_ACCOUNTS.RESOLVER.address] // resolver whitelist
             );
 
-            console.log(`✅ Dutch auction created! Auction address: ${auctionResult.auctionAddress}`)
+            console.log(`[APT]`, `Dutch auction created in tx ${auctionResult.auctionAddress}`)
             expect(auctionResult.auctionAddress).toBeDefined()
             expect(auctionResult.auctionAddress).not.toBe('')
 
@@ -975,9 +968,10 @@ describe('Resolving example', () => {
             const orderHash = sdkOrder.getOrderHash(srcChainId)
 
 
-            console.log(`[ETH]`, `Filling order ${orderHash} on ETH with 50% fill`)
+            console.log(`[ETH]`, `Creating escrow from order ${orderHash} for ${Number(sdkOrder.makingAmount) / 1_000_000} USDC`)
+            console.log(`   - User paying: ${Number(sdkOrder.makingAmount) / 1_000_000} USDC`)
 
-            const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmChainResolver.send(
+            const { txHash: orderFillHash, blockHash: srcDeployBlock } = await evmChainResolver.send(
                 resolverContract.deploySrc(
                     srcChainId,
                     sdkOrder,
@@ -998,7 +992,7 @@ describe('Resolving example', () => {
                 )
             )
 
-            console.log(`[ETH]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
+            console.log(`[ETH]`, `Escrow created in tx ${orderFillHash}`)
 
             const srcEscrowEvent = await evmFactory.getSrcDeployEvent(srcDeployBlock)
 
@@ -1017,25 +1011,22 @@ describe('Resolving example', () => {
             await increaseTime(11)
 
             // Withdraw from Aptos escrow using the secret
-            console.log('💰 Withdrawing from Aptos escrow...')
+            console.log(`[APT]`, `Withdrawing ${Number(sdkOrder.takingAmount) / 1_000_000} USDT from Aptos escrow`)
             const aptosWithdrawTxHash = await escrowHelper.withdrawFromEscrow(
                 aptosResolverAccount,
                 escrowResult.escrowAddress,
                 secrets[idx]
             );
 
-            console.log(`✅ Aptos withdrawal successful! Transaction: ${aptosWithdrawTxHash}`)
+            console.log(`[APT]`, `Withdrawal successful in tx ${aptosWithdrawTxHash}`)
             expect(aptosWithdrawTxHash).toBeDefined()
 
             // Withdraw from ETH escrow using the secret
-            console.log(`[ETH]`, `Withdrawing funds for resolver from ETH escrow`)
-            const {txHash: resolverWithdrawHash} = await evmChainResolver.send(
+            console.log(`[ETH]`, `Withdrawing ${Number(sdkOrder.makingAmount) / 1_000_000} USDC from ETH escrow`)
+            const { txHash: resolverWithdrawHash } = await evmChainResolver.send(
                 resolverContract.withdraw('src', srcEscrowAddress, secrets[idx], srcEscrowEvent[0])
             )
-            console.log(
-                `[ETH]`,
-                `Withdrew funds for resolver from ETH escrow to ${evm.resolver} in tx ${resolverWithdrawHash}`
-            )
+            console.log(`[ETH]`, `Withdrawal successful in tx ${resolverWithdrawHash}`)
 
             const resultBalances = await getBalances(
                 config.chain.evm.tokens.USDC.address,
@@ -1206,11 +1197,11 @@ describe('Resolving example', () => {
 
             console.log(`[${dstChainId}]`, `Creating escrow from order ${orderHash} for ${Number(dstImmutables.amount) / 1_000_000} USDC`)
             console.log(`   - Resolver paying: ${Number(dstImmutables.amount) / 1_000_000} USDC`)
-            const {txHash: dstDepositHash, blockTimestamp: dstDeployedAt} = await evmChainResolver.send(
+            const { txHash: dstDepositHash, blockTimestamp: dstDeployedAt } = await evmChainResolver.send(
                 resolverContract.deployDst(dstImmutables)
             )
 
-            console.log(`[${dstChainId}]`, `Created dst deposit for order ${orderHash} in tx ${dstDepositHash}`)
+            console.log(`[${dstChainId}]`, `Escrow created in tx ${dstDepositHash}`)
 
             const ESCROW_DST_IMPLEMENTATION = await evmFactory.getDestinationImpl()
 
@@ -1225,13 +1216,13 @@ describe('Resolving example', () => {
 
             // RESOLVER fills the fusion order on Aptos (source chain)
             console.log('🔒 Creating escrow from fusion order on Aptos...')
-            console.log(` Transfer ${Number(amount) / 1_000_000} USDT from FusionOrder to Escrow`)
+            console.log(`   - Resolver paying: ${Number(amount) / 1_000_000} USDT`)
             const escrowResult = await escrowHelper.createEscrowFromOrderSingleFill(
                 aptosResolverAccount, // RESOLVER fills the fusion order
                 fusionOrderResult.orderAddress
             );
 
-            console.log(`✅ Escrow created! Escrow address: ${escrowResult.escrowAddress}`)
+            console.log(`[APT]`, `Escrow created in tx ${escrowResult.escrowAddress}`)
             expect(escrowResult.escrowAddress).toBeDefined()
             expect(escrowResult.escrowAddress).not.toBe('')
 
@@ -1239,7 +1230,7 @@ describe('Resolving example', () => {
             await increaseTime(11)
 
             // User shares key after validation of dst escrow deployment
-            console.log(`[${dstChainId}]`, `Withdrawing funds for user from ${dstEscrowAddress}`)
+            console.log(`[${dstChainId}]`, `Withdrawing ${Number(sdkOrder.takingAmount) / 1_000_000} USDC from ETH escrow`)
 
             await evmChainResolver.send(
                 resolverContract.withdraw('dst', dstEscrowAddress, secret, dstImmutables.withDeployedAt(dstDeployedAt))
@@ -1250,18 +1241,18 @@ describe('Resolving example', () => {
             )
 
             // Withdraw from Aptos escrow using the secret
-            console.log('💰 Withdrawing from Aptos escrow...')
+            console.log(`[APT]`, `Withdrawing ${Number(sdkOrder.takingAmount) / 1_000_000} USDT from Aptos escrow`)
             const aptosWithdrawTxHash = await escrowHelper.withdrawFromEscrow(
                 aptosResolverAccount,
                 escrowResult.escrowAddress,
                 secret
             );
 
-            console.log(`✅ Aptos withdrawal successful! Transaction: ${aptosWithdrawTxHash}`)
+            console.log(`[APT]`, `Withdrawal successful in tx ${aptosWithdrawTxHash}`)
             expect(aptosWithdrawTxHash).toBeDefined()
 
             // Verify the cross-chain swap worked
-            console.log('🎉 Complete APT → ETH swap flow test completed!')
+            console.log('🎉 APT → ETH swap completed successfully!')
 
             // Verify that the resolver transferred funds to user on ETH
             expect(resultBalances.evm.user - initialBalances.evm.user).toBe(sdkOrder.takingAmount)
@@ -1410,10 +1401,11 @@ describe('Resolving example', () => {
             // Resolver fills order on source chain (ETH)
             const resolverContract = new Resolver(evm.resolver, evm.resolver)
 
-            console.log(`[ETH]`, `Filling order ${orderHash} on ETH`)
+            console.log(`[ETH]`, `Creating escrow from order ${orderHash} for ${Number(sdkOrder.makingAmount) / 1_000_000} USDC`)
+            console.log(`   - User paying: ${Number(sdkOrder.makingAmount) / 1_000_000} USDC`)
 
             const fillAmount = sdkOrder.makingAmount
-            const {txHash: orderFillHash, blockHash: srcDeployBlock} = await evmChainResolver.send(
+            const { txHash: orderFillHash, blockHash: srcDeployBlock } = await evmChainResolver.send(
                 resolverContract.deploySrc(
                     srcChainId,
                     sdkOrder,
@@ -1426,7 +1418,7 @@ describe('Resolving example', () => {
                 )
             )
 
-            console.log(`[ETH]`, `Order ${orderHash} filled for ${fillAmount} in tx ${orderFillHash}`)
+            console.log(`[ETH]`, `Escrow created in tx ${orderFillHash}`)
 
             const srcEscrowEvent = await evmFactory.getSrcDeployEvent(srcDeployBlock)
 
@@ -1456,7 +1448,7 @@ describe('Resolving example', () => {
 
             // Cancel ETH escrow (user does not share secret)
             console.log(`[ETH]`, `Cancelling ETH escrow ${srcEscrowAddress}`)
-            const {txHash: cancelSrcEscrow} = await evmChainResolver.send(
+            const { txHash: cancelSrcEscrow } = await evmChainResolver.send(
                 resolverContract.cancel('src', srcEscrowAddress, srcEscrowEvent[0])
             )
             console.log(`[ETH]`, `Cancelled ETH escrow ${srcEscrowAddress} in tx ${cancelSrcEscrow}`)
@@ -1474,8 +1466,8 @@ describe('Resolving example', () => {
 
 async function initChain(
     cnf: ChainConfig
-): Promise<{node?: CreateServerReturnType; provider: JsonRpcProvider; escrowFactory: string; resolver: string}> {
-    const {node, provider} = await getProvider(cnf)
+): Promise<{ node?: CreateServerReturnType; provider: JsonRpcProvider; escrowFactory: string; resolver: string }> {
+    const { node, provider } = await getProvider(cnf)
     const deployer = new SignerWallet(cnf.ownerPrivateKey, provider)
 
     // deploy EscrowFactory
@@ -1505,10 +1497,10 @@ async function initChain(
         provider,
         deployer
     )
-    return {node: node, provider, resolver, escrowFactory}
+    return { node: node, provider, resolver, escrowFactory }
 }
 
-async function getProvider(cnf: ChainConfig): Promise<{node?: CreateServerReturnType; provider: JsonRpcProvider}> {
+async function getProvider(cnf: ChainConfig): Promise<{ node?: CreateServerReturnType; provider: JsonRpcProvider }> {
     if (!cnf.createFork) {
         return {
             provider: new JsonRpcProvider(cnf.url, cnf.chainId, {
@@ -1519,7 +1511,7 @@ async function getProvider(cnf: ChainConfig): Promise<{node?: CreateServerReturn
     }
 
     const node = createServer({
-        instance: anvil({forkUrl: cnf.url, chainId: cnf.chainId}),
+        instance: anvil({ forkUrl: cnf.url, chainId: cnf.chainId }),
         limit: 1
     })
     await node.start()
@@ -1542,7 +1534,7 @@ async function getProvider(cnf: ChainConfig): Promise<{node?: CreateServerReturn
  * Deploy contract and return its address
  */
 async function deploy(
-    json: {abi: any; bytecode: any},
+    json: { abi: any; bytecode: any },
     params: unknown[],
     provider: JsonRpcProvider,
     deployer: SignerWallet
