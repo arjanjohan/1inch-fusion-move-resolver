@@ -213,27 +213,35 @@ describe('Resolving example', () => {
             const secretHash = await hashlockHelper.createHashFromSecret(secretBytes)
             const secretHashBytes = new Uint8Array(Buffer.from(secretHash.startsWith('0x') ? secretHash.slice(2) : secretHash, 'hex'))
 
+            let withdrawalPhase = 10n
+            let publicWithdrawalPhase = 100n
+            let privateCancellationPhase = 101n
+            let publicCancellationPhase = 102n
+
+            let makingAmount = parseUnits('100', 6)
+            let takingAmount = parseUnits('99', 6)
+
             // Create SDK order for ETH side with real source chain values and dummy destination values
             const sdkOrder = Sdk.CrossChainOrder.new(
                 new Address(evm.escrowFactory), // Real ETH escrow factory
                 {
                     salt: Sdk.randBigInt(1000n),
                     maker: new Address(await evmChainUser.getAddress()), // Real ETH maker
-                    makingAmount: parseUnits('100', 6), // 100 USDC (6 decimals)
-                    takingAmount: parseUnits('99', 6), // 99 USDT (6 decimals)
+                    makingAmount: makingAmount, // 100 USDC (6 decimals)
+                    takingAmount: takingAmount, // 99 USDT (6 decimals)
                     makerAsset: new Address(config.chain.evm.tokens.USDC.address), // Real ETH USDC
                     takerAsset: new Address('0x0000000000000000000000000000000000000000') // Dummy APT USDT
                 },
                 {
                     hashLock: Sdk.HashLock.forSingleFill(secret),
                     timeLocks: Sdk.TimeLocks.new({
-                        srcWithdrawal: 10n, // 10sec finality lock for test
-                        srcPublicWithdrawal: 120n, // 2m for private withdrawal
-                        srcCancellation: 121n, // 1sec public withdrawal
-                        srcPublicCancellation: 122n, // 1sec private cancellation
-                        dstWithdrawal: 10n, // 10sec finality lock for test
-                        dstPublicWithdrawal: 100n, // 100sec private withdrawal
-                        dstCancellation: 101n // 1sec public withdrawal
+                        srcWithdrawal: withdrawalPhase,
+                        srcPublicWithdrawal: publicWithdrawalPhase,
+                        srcCancellation: privateCancellationPhase,
+                        srcPublicCancellation: publicCancellationPhase,
+                        dstWithdrawal: withdrawalPhase,
+                        dstPublicWithdrawal: publicWithdrawalPhase,
+                        dstCancellation: privateCancellationPhase
                     }),
                     srcChainId, // Real ETH chain ID
                     dstChainId: aptosChainId, // Dummy APT chain ID
@@ -266,21 +274,18 @@ describe('Resolving example', () => {
             const signature = await evmChainUser.signOrder(srcChainId, sdkOrder)
             const orderHash = sdkOrder.getOrderHash(srcChainId)
 
-
             // Create Dutch auction on Aptos (destination chain) - USER creates this
             console.log('📝 Creating Dutch auction on Aptos...')
             const order_hash = new Uint8Array(Buffer.from('order_hash_123', 'utf8'))
             const hashes = [secretHashBytes] // Single hash for full fill
             const makerAsset = usdtMetadata // USDT metadata address
-            const makerAmount = BigInt(99_000_000) // 99 USDT (6 decimals)
-            const resolver_whitelist = [APTOS_ACCOUNTS.RESOLVER.address] // Only this resolver can fill
             const safety_deposit_amount = BigInt(10_000) // 0.0001 APT (8 decimals)
-            const finality_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const exclusive_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const public_withdrawal_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const private_cancellation_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const starting_amount = BigInt(99_000_000) // Starting amount (99 USDT)
-            const ending_amount = BigInt(49_500_000) // Ending amount (49.5 USDT)
+            const finality_duration = withdrawalPhase
+            const exclusive_duration = withdrawalPhase - finality_duration
+            const public_withdrawal_duration = publicWithdrawalPhase - exclusive_duration
+            const private_cancellation_duration = privateCancellationPhase - public_withdrawal_duration
+            const starting_amount = takingAmount
+            const ending_amount = takingAmount / 2n
             const auction_start_time = BigInt(Math.floor(Date.now() / 1000)) // Current time
             const decay_duration = BigInt(120) // 2 minutes decay
             const auction_end_time = auction_start_time + decay_duration + BigInt(60) // End time after decay duration
@@ -421,27 +426,35 @@ describe('Resolving example', () => {
             const secretHash = await hashlockHelper.createHashFromSecret(secretBytes)
             const secretHashBytes = new Uint8Array(Buffer.from(secretHash.startsWith('0x') ? secretHash.slice(2) : secretHash, 'hex'))
 
+            let withdrawalPhase = 10n
+            let publicWithdrawalPhase = 100n
+            let privateCancellationPhase = 101n
+            let publicCancellationPhase = 102n
+
+            let makingAmount = parseUnits('100', 6)
+            let takingAmount = parseUnits('100', 6)
+
             // Create SDK order for ETH side with real source chain values and dummy destination values
             const sdkOrder = Sdk.CrossChainOrder.new(
                 new Address(evm.escrowFactory), // Real ETH escrow factory
                 {
                     salt: Sdk.randBigInt(1000n),
                     maker: new Address(await evmChainUser.getAddress()), // Real ETH maker
-                    makingAmount: parseUnits('100', 6), // 100 USDC (6 decimals)
-                    takingAmount: parseUnits('100', 6), // 100 USDT (6 decimals)
+                    makingAmount: makingAmount, // 100 USDC (6 decimals)
+                    takingAmount: takingAmount, // 100 USDT (6 decimals)
                     makerAsset: new Address(config.chain.evm.tokens.USDC.address), // Real ETH USDC
                     takerAsset: new Address('0x0000000000000000000000000000000000000000') // Dummy APT USDT
                 },
                 {
                     hashLock: Sdk.HashLock.forSingleFill(secret),
                     timeLocks: Sdk.TimeLocks.new({
-                        srcWithdrawal: 10n, // 10sec finality lock for test
-                        srcPublicWithdrawal: 120n, // 2m for private withdrawal
-                        srcCancellation: 121n, // 1sec public withdrawal
-                        srcPublicCancellation: 122n, // 1sec private cancellation
-                        dstWithdrawal: 10n, // 10sec finality lock for test
-                        dstPublicWithdrawal: 100n, // 100sec private withdrawal
-                        dstCancellation: 101n // 1sec public withdrawal
+                        srcWithdrawal: withdrawalPhase,
+                        srcPublicWithdrawal: publicWithdrawalPhase,
+                        srcCancellation: privateCancellationPhase,
+                        srcPublicCancellation: publicCancellationPhase,
+                        dstWithdrawal: withdrawalPhase,
+                        dstPublicWithdrawal: publicWithdrawalPhase,
+                        dstCancellation: privateCancellationPhase
                     }),
                     srcChainId, // Real ETH chain ID
                     dstChainId: aptosChainId, // Dummy APT chain ID
@@ -480,15 +493,13 @@ describe('Resolving example', () => {
             const order_hash = new Uint8Array(Buffer.from('order_hash_123', 'utf8'))
             const hashes = [secretHashBytes] // Single hash for full fill
             const makerAsset = usdtMetadata // USDT metadata address
-            const makerAmount = BigInt(99_000_000) // 99 USDT (6 decimals)
-            const resolver_whitelist = [APTOS_ACCOUNTS.RESOLVER.address] // Only this resolver can fill
             const safety_deposit_amount = BigInt(10_000) // 0.0001 APT (8 decimals)
-            const finality_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const exclusive_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const public_withdrawal_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const private_cancellation_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const starting_amount = BigInt(100_000_000) // Starting amount (100 USDT)
-            const ending_amount = BigInt(99_000_000) // Ending amount (99 USDT)
+            const finality_duration = withdrawalPhase
+            const exclusive_duration = withdrawalPhase - finality_duration
+            const public_withdrawal_duration = publicWithdrawalPhase - exclusive_duration
+            const private_cancellation_duration = privateCancellationPhase - public_withdrawal_duration
+            const starting_amount = takingAmount
+            const ending_amount = takingAmount - BigInt(1_000_000) // 99 USDT
             const auction_start_time = BigInt(Math.floor(Date.now() / 1000)) // Current time
             const decay_duration = BigInt(5) // 5 seconds decay
             const auction_end_time = auction_start_time + decay_duration + BigInt(60) // End time after decay duration
@@ -638,27 +649,35 @@ describe('Resolving example', () => {
             const secretHash = secretHashes[secretHashes.length - 1]
             const secretHashBytes = new Uint8Array(Buffer.from(secretHash.startsWith('0x') ? secretHash.slice(2) : secretHash, 'hex'))
 
+            let withdrawalPhase = 10n
+            let publicWithdrawalPhase = 100n
+            let privateCancellationPhase = 101n
+            let publicCancellationPhase = 102n
+
+            let makingAmount = parseUnits('100', 6)
+            let takingAmount = parseUnits('99', 6)
+
             // Create SDK order for ETH side with real source chain values and dummy destination values
             const sdkOrder = Sdk.CrossChainOrder.new(
                 new Address(evm.escrowFactory), // Real ETH escrow factory
                 {
                     salt: Sdk.randBigInt(1000n),
                     maker: new Address(await evmChainUser.getAddress()), // Real ETH maker
-                    makingAmount: parseUnits('100', 6), // 100 USDC (6 decimals)
-                    takingAmount: parseUnits('99', 6), // 99 USDT (6 decimals)
+                    makingAmount: makingAmount, // 100 USDC (6 decimals)
+                    takingAmount: takingAmount, // 99 USDT (6 decimals)
                     makerAsset: new Address(config.chain.evm.tokens.USDC.address), // Real ETH USDC
                     takerAsset: new Address('0x0000000000000000000000000000000000000000') // Dummy APT USDT
                 },
                 {
                     hashLock: Sdk.HashLock.forMultipleFills(leaves),
                     timeLocks: Sdk.TimeLocks.new({
-                        srcWithdrawal: 10n, // 10sec finality lock for test
-                        srcPublicWithdrawal: 120n, // 2m for private withdrawal
-                        srcCancellation: 121n, // 1sec public withdrawal
-                        srcPublicCancellation: 122n, // 1sec private cancellation
-                        dstWithdrawal: 10n, // 10sec finality lock for test
-                        dstPublicWithdrawal: 100n, // 100sec private withdrawal
-                        dstCancellation: 101n // 1sec public withdrawal
+                        srcWithdrawal: withdrawalPhase,
+                        srcPublicWithdrawal: publicWithdrawalPhase,
+                        srcCancellation: privateCancellationPhase,
+                        srcPublicCancellation: publicCancellationPhase,
+                        dstWithdrawal: withdrawalPhase,
+                        dstPublicWithdrawal: publicWithdrawalPhase,
+                        dstCancellation: privateCancellationPhase
                     }),
                     srcChainId, // Real ETH chain ID
                     dstChainId: aptosChainId, // Dummy APT chain ID
@@ -700,15 +719,13 @@ describe('Resolving example', () => {
             const order_hash = new Uint8Array(Buffer.from('order_hash_123', 'utf8'))
             const hashes = [secretHashBytes] // Single hash for full fill
             const makerAsset = usdtMetadata // USDT metadata address
-            const makerAmount = BigInt(99_000_000) // 99 USDT (6 decimals)
-            const resolver_whitelist = [APTOS_ACCOUNTS.RESOLVER.address] // Only this resolver can fill
             const safety_deposit_amount = BigInt(10_000) // 0.0001 APT (8 decimals)
-            const finality_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const exclusive_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const public_withdrawal_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const private_cancellation_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const starting_amount = BigInt(99_000_000) // Starting amount (99 USDT)
-            const ending_amount = BigInt(49_500_000) // Ending amount (49.5 USDT)
+            const finality_duration = withdrawalPhase
+            const exclusive_duration = withdrawalPhase - finality_duration
+            const public_withdrawal_duration = publicWithdrawalPhase - exclusive_duration
+            const private_cancellation_duration = privateCancellationPhase - public_withdrawal_duration
+            const starting_amount = takingAmount
+            const ending_amount = takingAmount / 2n
             const auction_start_time = BigInt(Math.floor(Date.now() / 1000)) // Current time
             const decay_duration = BigInt(120) // 2 minutes decay
             const auction_end_time = auction_start_time + decay_duration + BigInt(60) // End time after decay duration
@@ -851,27 +868,35 @@ describe('Resolving example', () => {
             const secretHashes = secrets.map((s) => Sdk.HashLock.hashSecret(s))
             const leaves = Sdk.HashLock.getMerkleLeaves(secrets)
 
+            let withdrawalPhase = 10n
+            let publicWithdrawalPhase = 100n
+            let privateCancellationPhase = 101n
+            let publicCancellationPhase = 102n
+
+            let makingAmount = parseUnits('100', 6)
+            let takingAmount = parseUnits('99', 6)
+
             // Create SDK order for ETH side with real source chain values and dummy destination values
             const sdkOrder = Sdk.CrossChainOrder.new(
                 new Address(evm.escrowFactory), // Real ETH escrow factory
                 {
                     salt: Sdk.randBigInt(1000n),
                     maker: new Address(await evmChainUser.getAddress()), // Real ETH maker
-                    makingAmount: parseUnits('100', 6), // 100 USDC (6 decimals)
-                    takingAmount: parseUnits('99', 6), // 99 USDT (6 decimals)
+                    makingAmount: makingAmount, // 100 USDC (6 decimals)
+                    takingAmount: takingAmount, // 99 USDT (6 decimals)
                     makerAsset: new Address(config.chain.evm.tokens.USDC.address), // Real ETH USDC
                     takerAsset: new Address('0x0000000000000000000000000000000000000000') // Dummy APT USDT
                 },
                 {
                     hashLock: Sdk.HashLock.forMultipleFills(leaves),
                     timeLocks: Sdk.TimeLocks.new({
-                        srcWithdrawal: 10n, // 10sec finality lock for test
-                        srcPublicWithdrawal: 120n, // 2m for private withdrawal
-                        srcCancellation: 121n, // 1sec public withdrawal
-                        srcPublicCancellation: 122n, // 1sec private cancellation
-                        dstWithdrawal: 10n, // 10sec finality lock for test
-                        dstPublicWithdrawal: 100n, // 100sec private withdrawal
-                        dstCancellation: 101n // 1sec public withdrawal
+                        srcWithdrawal: withdrawalPhase,
+                        srcPublicWithdrawal: publicWithdrawalPhase,
+                        srcCancellation: privateCancellationPhase,
+                        srcPublicCancellation: publicCancellationPhase,
+                        dstWithdrawal: withdrawalPhase,
+                        dstPublicWithdrawal: publicWithdrawalPhase,
+                        dstCancellation: privateCancellationPhase
                     }),
                     srcChainId, // Real ETH chain ID
                     dstChainId: aptosChainId, // Dummy APT chain ID
@@ -911,14 +936,13 @@ describe('Resolving example', () => {
             const order_hash = new Uint8Array(Buffer.from('order_hash_123', 'utf8'))
             const hashes = secretHashesBytes // Multiple hashes for partial fills
             const makerAsset = usdtMetadata // USDT metadata address
-            const resolver_whitelist = [APTOS_ACCOUNTS.RESOLVER.address] // Only this resolver can fill
             const safety_deposit_amount = BigInt(10_000) // 0.0001 APT (8 decimals)
-            const finality_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const exclusive_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const public_withdrawal_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const private_cancellation_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const starting_amount = BigInt(99_000_000) // Starting amount (99 USDT)
-            const ending_amount = BigInt(49_500_000) // Ending amount (49.5 USDT)
+            const finality_duration = withdrawalPhase
+            const exclusive_duration = withdrawalPhase - finality_duration
+            const public_withdrawal_duration = publicWithdrawalPhase - exclusive_duration
+            const private_cancellation_duration = privateCancellationPhase - public_withdrawal_duration
+            const starting_amount = takingAmount
+            const ending_amount = takingAmount / 2n
             const auction_start_time = BigInt(Math.floor(Date.now() / 1000)) // Current time
             const decay_duration = BigInt(120) // 2 minutes decay
             const auction_end_time = auction_start_time + decay_duration + BigInt(60) // End time after decay duration
@@ -1072,27 +1096,35 @@ describe('Resolving example', () => {
             const secretHash = await hashlockHelper.createHashFromSecret(secretBytes)
             const secretHashBytes = new Uint8Array(Buffer.from(secretHash.startsWith('0x') ? secretHash.slice(2) : secretHash, 'hex'))
 
+            let withdrawalPhase = 10n
+            let publicWithdrawalPhase = 100n
+            let privateCancellationPhase = 101n
+            let publicCancellationPhase = 102n
+
+            let makingAmount = parseUnits('99', 6)
+            let takingAmount = parseUnits('100', 6)
+
             // Create SDK order for ETH side with dummy source chain values and real destination values
             const sdkOrder = Sdk.CrossChainOrder.new(
                 new Address('0x0000000000000000000000000000000000000000'), // Dummy APT escrow factory
                 {
                     salt: Sdk.randBigInt(1000n),
                     maker: new Address('0x0000000000000000000000000000000000000000'), // Dummy APT maker
-                    makingAmount: parseUnits('99', 6), // 99 USDT (6 decimals) - APT side
-                    takingAmount: parseUnits('100', 6), // 100 USDC (6 decimals) - ETH side
+                    makingAmount: makingAmount, // 99 USDT (6 decimals) - APT side
+                    takingAmount: takingAmount, // 100 USDC (6 decimals) - ETH side
                     makerAsset: new Address('0x0000000000000000000000000000000000000000'), // Dummy APT USDT
                     takerAsset: new Address(config.chain.evm.tokens.USDC.address) // Real ETH USDC
                 },
                 {
                     hashLock: Sdk.HashLock.forSingleFill(secret),
                     timeLocks: Sdk.TimeLocks.new({
-                        srcWithdrawal: 10n, // 10sec finality lock for test
-                        srcPublicWithdrawal: 120n, // 2m for private withdrawal
-                        srcCancellation: 121n, // 1sec public withdrawal
-                        srcPublicCancellation: 122n, // 1sec private cancellation
-                        dstWithdrawal: 10n, // 10sec finality lock for test
-                        dstPublicWithdrawal: 100n, // 100sec private withdrawal
-                        dstCancellation: 101n // 1sec public withdrawal
+                        srcWithdrawal: withdrawalPhase,
+                        srcPublicWithdrawal: publicWithdrawalPhase,
+                        srcCancellation: privateCancellationPhase,
+                        srcPublicCancellation: publicCancellationPhase,
+                        dstWithdrawal: withdrawalPhase,
+                        dstPublicWithdrawal: publicWithdrawalPhase,
+                        dstCancellation: privateCancellationPhase
                     }),
                     srcChainId: aptosChainId, // Dummy APT chain ID
                     dstChainId, // Real ETH chain ID
@@ -1126,13 +1158,12 @@ describe('Resolving example', () => {
             const order_hash = new Uint8Array(Buffer.from('order_hash_123', 'utf8'))
             const hashes = [secretHashBytes] // Single hash for full fill
             const makerAsset = usdtMetadata // USDT metadata address
-            const resolver_whitelist = [APTOS_ACCOUNTS.RESOLVER.address] // Only this resolver can fill
             const safety_deposit_amount = BigInt(10_000) // 0.0001 APT (8 decimals)
-            const finality_duration = BigInt(10) // 10 seconds - matches SDK srcWithdrawal
-            const exclusive_duration = BigInt(10) // 10 seconds - matches SDK srcWithdrawal
-            const public_withdrawal_duration = BigInt(10) // 10 seconds - matches SDK srcWithdrawal
-            const private_cancellation_duration = BigInt(10) // 10 seconds - matches SDK srcWithdrawal
-            const amount = BigInt(99_000_000) // 99 USDT (6 decimals)
+            const finality_duration = withdrawalPhase
+            const exclusive_duration = withdrawalPhase - finality_duration
+            const public_withdrawal_duration = publicWithdrawalPhase - exclusive_duration
+            const private_cancellation_duration = privateCancellationPhase - public_withdrawal_duration
+            const amount = makingAmount
 
             const fusionOrderResult = await fusionOrderHelper.createOrder(
                 aptosUserAccount, // USER creates the fusion order
@@ -1140,7 +1171,7 @@ describe('Resolving example', () => {
                 [secretHashBytes], // Single hash for full fill
                 makerAsset, // metadata
                 amount,
-                resolver_whitelist,
+                [APTOS_ACCOUNTS.RESOLVER.address], // resolver whitelist
                 safety_deposit_amount,
                 finality_duration,
                 exclusive_duration,
@@ -1292,27 +1323,35 @@ describe('Resolving example', () => {
             const secretHash = await hashlockHelper.createHashFromSecret(secretBytes)
             const secretHashBytes = new Uint8Array(Buffer.from(secretHash.startsWith('0x') ? secretHash.slice(2) : secretHash, 'hex'))
 
+            let withdrawalPhase = 1n
+            let publicWithdrawalPhase = 10n
+            let privateCancellationPhase = 11n
+            let publicCancellationPhase = 12n
+
+            let makingAmount = parseUnits('100', 6)
+            let takingAmount = parseUnits('99', 6)
+
             // Create SDK order for ETH side with real source chain values and dummy destination values
             const sdkOrder = Sdk.CrossChainOrder.new(
                 new Address(evm.escrowFactory), // Real ETH escrow factory
                 {
                     salt: Sdk.randBigInt(1000n),
                     maker: new Address(await evmChainUser.getAddress()), // Real ETH maker
-                    makingAmount: parseUnits('100', 6), // 100 USDC (6 decimals)
-                    takingAmount: parseUnits('99', 6), // 99 USDT (6 decimals)
+                    makingAmount: makingAmount, // 100 USDC (6 decimals)
+                    takingAmount: takingAmount, // 99 USDT (6 decimals)
                     makerAsset: new Address(config.chain.evm.tokens.USDC.address), // Real ETH USDC
                     takerAsset: new Address('0x0000000000000000000000000000000000000000') // Dummy APT USDT
                 },
                 {
                     hashLock: Sdk.HashLock.forSingleFill(secret),
                     timeLocks: Sdk.TimeLocks.new({
-                        srcWithdrawal: 1n, // 10sec finality lock for test
-                        srcPublicWithdrawal: 10n, // 2m for private withdrawal
-                        srcCancellation: 11n, // 1sec public withdrawal
-                        srcPublicCancellation: 12n, // 1sec private cancellation
-                        dstWithdrawal: 1n, // 10sec finality lock for test
-                        dstPublicWithdrawal: 10n, // 100sec private withdrawal
-                        dstCancellation: 11n // 1sec public withdrawal
+                        srcWithdrawal: withdrawalPhase,
+                        srcPublicWithdrawal: publicWithdrawalPhase,
+                        srcCancellation: privateCancellationPhase,
+                        srcPublicCancellation: publicCancellationPhase,
+                        dstWithdrawal: withdrawalPhase,
+                        dstPublicWithdrawal: publicWithdrawalPhase,
+                        dstCancellation: privateCancellationPhase
                     }),
                     srcChainId, // Real ETH chain ID
                     dstChainId: aptosChainId, // Dummy APT chain ID
@@ -1351,15 +1390,13 @@ describe('Resolving example', () => {
             const order_hash = new Uint8Array(Buffer.from('order_hash_123', 'utf8'))
             const hashes = [secretHashBytes] // Single hash for full fill
             const makerAsset = usdtMetadata // USDT metadata address
-            const makerAmount = BigInt(99_000_000) // 99 USDT (6 decimals)
-            const resolver_whitelist = [APTOS_ACCOUNTS.RESOLVER.address] // Only this resolver can fill
             const safety_deposit_amount = BigInt(10_000) // 0.0001 APT (8 decimals)
-            const finality_duration = BigInt(1) // 10 seconds - matches SDK dstWithdrawal
-            const exclusive_duration = BigInt(10) // 10 seconds - matches SDK dstWithdrawal
-            const public_withdrawal_duration = BigInt(1) // 10 seconds - matches SDK dstWithdrawal
-            const private_cancellation_duration = BigInt(1) // 10 seconds - matches SDK dstWithdrawal
-            const starting_amount = BigInt(99_000_000) // Starting amount (99 USDT)
-            const ending_amount = BigInt(49_500_000) // Ending amount (49.5 USDT)
+            const finality_duration = withdrawalPhase
+            const exclusive_duration = withdrawalPhase - finality_duration
+            const public_withdrawal_duration = publicWithdrawalPhase - exclusive_duration
+            const private_cancellation_duration = privateCancellationPhase - public_withdrawal_duration
+            const starting_amount = takingAmount
+            const ending_amount = takingAmount / 2n
             const auction_start_time = BigInt(Math.floor(Date.now() / 1000)) // Current time
             const decay_duration = BigInt(120) // 2 minutes decay
             const auction_end_time = auction_start_time + decay_duration + BigInt(60) // End time after decay duration

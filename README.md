@@ -88,19 +88,20 @@ pnpm test
 
 ### Test Results
 ```
- PASS  tests/main.spec.ts (93.163 s)
+ PASS  tests/main.spec.ts (101.171 s)
   Resolving example
     ETH -> APT Fill
-      ✓ should swap Ethereum USDC -> Aptos USDT. Single fill only (14729 ms)
-      ✓ should swap Ethereum USDC -> Aptos USDT. Multiple fills. Fill 100% (14209 ms)
-      ✓ should swap Ethereum USDC -> Aptos USDT. Multiple fills. Fill 50% (13983 ms)
+      ✓ should swap Ethereum USDC -> Aptos USDT. Single fill only (14677 ms)
+      ✓ should swap Ethereum USDC -> Aptos USDT. Single fill after decreased (20144 ms)
+      ✓ should swap Ethereum USDC -> Aptos USDT. Multiple fills. Fill 100% (13984 ms)
+      ✓ should swap Ethereum USDC -> Aptos USDT. Multiple fills. Fill 50% (13965 ms)
     APT -> ETH Fill
-      ✓ should swap Aptos USDT -> Ethereum USDC. Single fill only (24903 ms)
+      ✓ should swap Aptos USDT -> Ethereum USDC. Single fill only (13865 ms)
     Cancel
-      ✓ should cancel swap Ethereum USDC -> Aptos USDT (17537 ms)
+      ✓ should cancel swap Ethereum USDC -> Aptos USDT (17681 ms)
 
 Test Suites: 1 passed, 1 total
-Tests:       5 passed, 5 total
+Tests:       6 passed, 6 total
 ```
 
 
